@@ -25,7 +25,7 @@ export default function App(){
   useEffect(()=>{
     if(!needCandidates) return
     setLoading(true); setErr(null)
-    katago.candidates(signMap, 'B', s.rank, s.n, s.strategy)
+    katago.candidates(signMap, 'B', s.rank, s.n, s.strategy, s.history)
       .then(res=> s.setCandidates(res.moves as any))
       .catch(e=> { setErr(String(e)); // fallback: mock already handled server-side; show empty
       })
@@ -54,7 +54,7 @@ export default function App(){
       if(s.status!=='playing') return
       try{
         const curMap = boardSignMap(useGame.getState().board)
-        const res = await katago.genmove(curMap, 'W', s.rank)
+        const res = await katago.genmove(curMap, 'W', s.rank, useGame.getState().history)
         if(res.move.pass) useGame.getState().pass()
         else useGame.getState().applyMove(res.move.x, res.move.y)
         useGame.getState().pushWinrate(res.winrate)
@@ -79,7 +79,7 @@ export default function App(){
       setTimeout(async()=>{
         try{
           const curMap = boardSignMap(useGame.getState().board)
-          const res = await katago.genmove(curMap, 'W', s.rank)
+          const res = await katago.genmove(curMap, 'W', s.rank, useGame.getState().history)
           if(res.move.pass) useGame.getState().pass(); else useGame.getState().applyMove(res.move.x, res.move.y)
         }catch{}
       },400)

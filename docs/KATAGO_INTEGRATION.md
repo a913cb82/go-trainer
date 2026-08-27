@@ -17,12 +17,19 @@ Query:
 {"id":"q1","moves":[],"rules":"japanese","komi":7,"boardXSize":9,"boardYSize":9,"board":[],"analyzeTurns":["B"]}
 ```
 
-Parse `moveInfos[].move, winrate, policy, scoreLead, ownership` for `P_h` and `W_s`.
+Parse `moveInfos[].move, winrate, humanPrior, policy, scoreLead, ownership` for `P_h` and `W_s`. `humanPrior` is the raw HumanSL policy used for rank imitation.
 
-## Queries
+## HumanSL profiles and queries
+
+KataGo supports two rank-profile families:
+
+- `rank_<RANK>` — modern opening style (recommended for this app).
+- `preaz_<RANK>` — pre-AlphaZero/2016 opening style, useful only when intentionally imitating that era.
+
+For rank imitation, KataGo recommends setting `humanSLProfile`, preserving history with `ignorePreRootHistory=false`, requesting `includePolicy=true`, and sampling moves proportional to `humanPolicy` (even 1 visit is sufficient for raw imitation). The server now follows this for White and ranks candidate choices by `humanPolicy`; it also sends the real move history rather than reconstructing a fake row-major sequence.
 
 - **Candidates:** query both models on same position → compute `G`, pick per LEARNING_DESIGN thresholds → shuffle.
-- **Genmove:** query HumanSL@rank, sample or argmax by config (temperature controls rank fidelity).
+- **Genmove:** query HumanSL@rank and sample from `humanPolicy`; pass only when KataGo's top result is pass.
 - Cache by board hash + rank.
 
 ## Deployment

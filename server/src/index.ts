@@ -10,10 +10,38 @@ await app.register(cors, {origin:true})
 const engine = new KatagoEngine()
 
 const boardSchema = z.array(z.array(z.number().min(-1).max(1))).length(9)
+const historySchema = z.array(z.object({
+  x: z.number().int().min(-1).max(8),
+  y: z.number().int().min(-1).max(8),
+  color: z.union([z.literal(1), z.literal(-1)])
+})).default([])
 
 // KataGo skips the letter 'I' for the 9th column — use 'J' for x=8.
 const colChar = (x:number)=> String.fromCharCode(65 + (x>=8 ? x+1 : x))
 const toX = (c:string)=>{ const v=c.charCodeAt(0)-65; return v>=8 ? v-1 : v }
+
+function positionArgs(board:number[][], history:{x:number,y:number,color:1|-1}[], toMove:'B'|'W'){
+  if(history.length){
+    const moves: [string,string][] = history.map(h=>[
+      h.color===1 ? 'B' : 'W',
+      h.x<0 ? 'pass' : colChar(h.x)+(9-h.y)
+    ])
+    return {moves, initialStones: [] as [string,string][], initialPlayer: undefined}
+  }
+  const initialStones: [string,string][] = []
+  for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]!==0)
+    initialStones.push([board[y][x]===1?'B':'W', colChar(x)+(9-y)])
+  return {moves: [] as [string,string][], initialStones, initialPlayer: toMove}
+}
+
+function moveCoord(info:any){
+  const coord = String(info?.move || '')
+  if(coord==='pass') return {x:4,y:4,pass:true}
+  if(!/^[A-HJ][1-9]$/.test(coord)) return null
+  return {x:toX(coord), y:9-parseInt(coord.slice(1),10), pass:false}
+}
+function humanPrior(info:any){ return Number(info?.humanPrior ?? info?.prior ?? info?.policy ?? 0) }
+function validInfos(infos:any[]){ return infos.filter(info=>moveCoord(info)!==null) }
 
 app.get('/health', async()=>({ok:true, mode: engine.mode, ranks: RANKS}))
 app.get('/ranks', async()=>({ranks: RANKS}))
@@ -24,53 +52,50 @@ const candidatesBody = z.object({
   rank: z.enum(RANKS as any).default('10k'),
   n: z.number().min(1).max(5).default(5),
   strategy: z.enum(['good-vs-tempting','human-only','tesuji','blunder-check','strong-only'] as any).default('good-vs-tempting'),
+  history: historySchema,
   komi: z.number().default(7),
   maxVisits: z.number().min(1).max(2000).default(15)
 })
 app.post('/candidates', async(req, reply)=>{
   const parsed = candidatesBody.safeParse(req.body)
   if(!parsed.success) return reply.code(400).send({error: parsed.error.flatten()})
-  const {board, rank, n, strategy, maxVisits} = parsed.data
+  const {board, rank, n, strategy, maxVisits, history} = parsed.data
   const profile = 'rank_' + String(rank)
   if(engine.mode==='real'){
     try{
-      const initStones: [string,string][] = []
       const sign = board as number[][]
-      const movesArr: [string,string][] = []
-      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), colChar(x)+(9-y)])
+      const pos = positionArgs(sign, history, 'B')
       const query = {
         id: `c-${Date.now()}`,
-        moves: movesArr,
-        initialStones: initStones,
+        ...pos,
         rules: 'japanese',
         komi: 7,
         boardXSize: 9,
         boardYSize: 9,
-        analyzeTurns: [movesArr.length || 0],
+        analyzeTurns: [pos.moves.length],
         maxVisits,
         includePolicy: true,
         includeOwnership: false,
-        overrideSettings: { humanSLProfile: profile }
+        overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
       }
       const res = await engine.query(query, 15000) as any
-      const infos = res?.moveInfos || res?.result?.moveInfos || []
-      // Build n distinct moves, skipping pass and occupied/out-of-range coords, padded to exactly n.
+      const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
+      // Human-style candidates are ranked by the HumanSL policy, not MCTS result order.
+      const humanInfos = [...infos].sort((a,b)=> humanPrior(b)-humanPrior(a))
       const seen = new Set<string>()
       const mapped: any[] = []
-      for(const info of infos){
+      for(const info of humanInfos){
         if(mapped.length>=n) break
-        const coord = (info.move as string) || "E5"
-        if(coord==="pass") continue
-        const x = toX(coord)
-        const y = 9 - parseInt(coord.slice(1) || "5")
-        if(x<0||x>8||y<0||y>8) continue
+        const point = moveCoord(info)
+        if(!point || point.pass) continue
+        const {x,y} = point
         const key = `${x},${y}`
         if(seen.has(key)) continue
         seen.add(key)
         mapped.push({
           x, y,
           label: 'ABCDE'[mapped.length % 5] || 'A',
-          humanPolicy: info.humanPrior ?? info.prior ?? info.policy ?? 0.1,
+          humanPolicy: humanPrior(info),
           strongWinrate: info.winrate ?? 0.5,
           strongScore: info.scoreLead ?? 0,
           tag: (info.winrate ?? 0.5) > 0.53 ? 'good' : (info.winrate ?? 0.5) < 0.45 ? 'overconcentrated' : 'ok'
@@ -91,27 +116,38 @@ const genmoveBody = z.object({
   board: boardSchema,
   toMove: z.enum(['B','W']).default('B'),
   rank: z.enum(RANKS as any).default('10k'),
+  history: historySchema,
   komi: z.number().default(7),
   maxVisits: z.number().min(1).max(2000).default(15)
 })
 app.post('/genmove', async(req, reply)=>{
   const p = genmoveBody.safeParse(req.body)
   if(!p.success) return reply.code(400).send({error:p.error.flatten()})
-  const {board, toMove, rank, maxVisits} = p.data
+  const {board, toMove, rank, maxVisits, history} = p.data
   const profile = 'rank_' + String(rank)
   if(engine.mode==='real'){
     try{
-      const initStones: [string,string][] = []
       const sign = board as number[][]
-      const movesArr: [string,string][] = []
-      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), colChar(x)+(9-y)])
-      const res = await engine.query({ id: `g-${Date.now()}`, moves: movesArr, initialStones: initStones, rules: 'japanese', komi: 7, boardXSize: 9, boardYSize: 9, analyzeTurns: [movesArr.length || 0], maxVisits: maxVisits || 150, includePolicy: true, includeOwnership: false, overrideSettings: { humanSLProfile: profile } }, 15000) as any
-      const best = res?.moveInfos?.[0] || res?.result?.moveInfos?.[0] || { winrate: 0.5, prior: 0.1, move: "E5", scoreLead: 0 }
-      const pickCoord = (best?.move as string) || "E5"
-      if(pickCoord==="pass") return { move: { x: 4, y: 4, pass: true }, winrate: best?.winrate || 0.5, scoreLead: best?.scoreLead || 0 }
-      const cx = toX(pickCoord)
-      const cy = 9 - parseInt(pickCoord.slice(1) || "5")
-      return { move: { x: Math.max(0,Math.min(8,cx)), y: Math.max(0,Math.min(8,cy)), pass: false }, winrate: best?.winrate || 0.5, scoreLead: best?.scoreLead || 0 }
+      const pos = positionArgs(sign, history, toMove)
+      const res = await engine.query({ id: `g-${Date.now()}`, ...pos, rules: 'japanese', komi: 7, boardXSize: 9, boardYSize: 9, analyzeTurns: [pos.moves.length], maxVisits: maxVisits || 150, includePolicy: true, includeOwnership: false, overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false } }, 15000) as any
+      const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
+      const top = (res?.moveInfos || res?.result?.moveInfos || []).find((info:any)=> info.order===0) || res?.moveInfos?.[0] || res?.result?.moveInfos?.[0]
+      // Recommended HumanSL play: if search says pass, pass; otherwise sample by humanPolicy.
+      const pool = infos.length ? infos : (top ? [top] : [])
+      const total = pool.reduce((sum:number, info:any)=> sum + humanPrior(info), 0)
+      let pick = pool[0]
+      if(total>0){
+        let r = Math.random()*total
+        for(const info of pool){
+          r -= humanPrior(info)
+          if(r<=0){ pick=info; break }
+        }
+      }
+      if(top && String(top.move)==='pass') return { move: { x: 4, y: 4, pass: true }, winrate: top.winrate || 0.5, scoreLead: top.scoreLead || 0 }
+      if(!pick) throw new Error('KataGo returned no legal move')
+      const point = moveCoord(pick)
+      if(!point || point.pass) throw new Error('KataGo returned no playable human move')
+      return { move: point, winrate: pick.winrate || 0.5, scoreLead: pick.scoreLead || 0 }
     } catch (e: any) {
       console.error('Real genmove error:', e.message)
       const m = mockGenmove(board as any, rank as any, maxVisits)
@@ -127,32 +163,33 @@ const evaluateBody = z.object({
   move: z.object({x:z.number().min(0).max(8), y:z.number().min(0).max(8)}),
   toMove: z.enum(['B','W']).default('B'),
   rank: z.enum(RANKS as any).default('10k'),
+  history: historySchema,
   maxVisits: z.number().min(1).max(2000).default(15)
 })
 app.post('/evaluate', async(req, reply)=>{
   const p = evaluateBody.safeParse(req.body)
   if(!p.success) return reply.code(400).send({error:p.error.flatten()})
-  const {board, move, toMove, maxVisits, rank} = p.data as any
+  const {board, move, toMove, maxVisits, rank, history} = p.data as any
   const profile = 'rank_' + String(rank || '10k')
   if(engine.mode==='real'){
     try{
       const sign = board as number[][]
-      const movesArr: [string,string][] = []
-      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), colChar(x)+(9-y)])
+      const pos = positionArgs(sign, history, toMove)
       // also include the move to evaluate as next move
       const evalCoord = colChar(move.x)+(9-move.y)
       const query = {
         id: `e-${Date.now()}`,
-        moves: [...movesArr, [toMove, evalCoord] as [string,string]],
+        moves: [...pos.moves, [toMove, evalCoord] as [string,string]],
+        initialStones: pos.initialStones,
         rules: 'japanese',
         komi: 7,
         boardXSize: 9,
         boardYSize: 9,
-        analyzeTurns: [movesArr.length],
+        analyzeTurns: [pos.moves.length],
         maxVisits: maxVisits || 50,
         includeOwnership: true,
         includePolicy: true,
-        overrideSettings: { humanSLProfile: profile }
+        overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
       }
       const res = await engine.query(query, 15000) as any
       const ownership = res?.ownership || res?.result?.ownership || Array.from({length:9},()=>Array(9).fill(0.5))
