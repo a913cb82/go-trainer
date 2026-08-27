@@ -1,7 +1,17 @@
 import { spawn, ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import type { Rank, Strategy } from './types.js'
 import { rankIndex } from './types.js'
+
+// Resolve default model/config paths relative to this file, so the project is
+// portable (any clone works) instead of hardcoding an absolute /home/... path.
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const SERVER_ROOT = resolve(__dirname, '..')
+const defaultModel = resolve(SERVER_ROOT, 'models', 'strong.bin.gz')
+const defaultHumanModel = resolve(SERVER_ROOT, 'models', 'b18c384nbt-humanv0.bin.gz')
+const defaultConfig = resolve(SERVER_ROOT, 'config', 'analysis.cfg')
 
 export type KatagoMode = 'mock'|'real'
 type Pending = { resolve:(v:any)=>void, reject:(e:any)=>void }
@@ -131,11 +141,21 @@ export class KatagoEngine {
     }
   }
   spawn(bin:string){
-    const model = process.env.KATAGO_MODEL || '/home/acbraith/projects/go_game/server/models/strong.bin.gz'
-    const humanModel = process.env.KATAGO_HUMAN_MODEL || '/home/acbraith/projects/go_game/server/models/b18c384nbt-humanv0.bin.gz'
-    const args = ['analysis','-model',model,'-human-model',humanModel,'-config','/home/acbraith/projects/go_game/server/config/analysis.cfg']
-    // For human SL: must set profile either in config or overrideSettings per query
-    this.proc = spawn(bin, args, {stdio:['pipe','pipe','pipe'], cwd: process.cwd(), env: {...process.env, LD_LIBRARY_PATH: (process.env.LD_LIBRARY_PATH || '') + ':/usr/local/cuda/targets/x86_64-linux/lib:/tmp/libs/usr/lib/x86_64-linux-gnu:/home/acbraith/projects/go_game/server'}})
+    const model = process.env.KATAGO_MODEL || defaultModel
+    const humanModel = process.env.KATAGO_HUMAN_MODEL || defaultHumanModel
+    const config = process.env.KATAGO_CONFIG || defaultConfig
+    const args = ['analysis','-model',model,'-human-model',humanModel,'-config',config]
+    // For human SL: must set profile either in config or overrideSettings per query.
+    // Prepend CUDA + libzip/libssl lib dirs; also add server root so a self-contained
+    // copy of the libs in server/ resolves too.
+    const ld = [
+      process.env.LD_LIBRARY_PATH || '',
+      '/usr/local/cuda/targets/x86_64-linux/lib',
+      SERVER_ROOT,
+      resolve(SERVER_ROOT, '..', 'libs'),
+      '/tmp/libs/usr/lib/x86_64-linux-gnu'
+    ].filter(Boolean).join(':')
+    this.proc = spawn(bin, args, {stdio:['pipe','pipe','pipe'], cwd: process.cwd(), env: {...process.env, LD_LIBRARY_PATH: ld}})
     this.proc.stdout?.on('data',d=> this.onData(d.toString()))
     this.proc.stderr?.on('data',d=> console.error('[katago]', d.toString().slice(0,500)))
     this.proc.on('error',()=> { this.mode='mock'; console.warn('katago spawn failed, using mock') })

@@ -9,3 +9,4 @@ server/models/*.bin
 *.deb
 server/analysis_logs/
 analysis_logs/
+server/katago

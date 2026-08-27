@@ -17,15 +17,16 @@ Why 9×9 + multiple choice? Free play teaches shape and tactics quickly, but beg
 
 **Frontend — PWA wrapped for Android via Capacitor:**
 - **Vite + TypeScript + React** + `vite-plugin-pwa` → installable, same `dist/` in Capacitor WebView
-- **Board UI:** `@sabaki/shudan` 1.8.0 (Preact goban, `signMap`/`paintMap`/`ghostStoneMap` for A–E markers) — reuse, don't rewrite
-- **Rules:** `@sabaki/go-board` 1.4.3 (MIT) for capture/ko/suicide legality; server is truth (`online-go/goban` 8.3.226 is heavier alt with scoring)
+- **Board UI:** custom SVG goban (`app/src/components/Board/GobanView.tsx`) — A–E candidate markers, rank-graduated feedback halo, last-move marker. (Shudan was dropped: it's Preact and crashes under React 19.)
+- **Rules:** `@sabaki/go-board` 1.4.3 (MIT) for capture/ko/suicide legality
 - **SGF:** `@sabaki/sgf` 3.5.0 (MIT) for parse/stringify
-- **State:** Zustand + TanStack Query
+- **State:** Zustand
 
-**Backend — KataGo analysis server (Node or Python):**
-- Spawns `katago analysis`, loads **HumanSL** + **strong** nets; endpoints `POST /candidates|/genmove|/evaluate`
-- No npm wrapper — speak Analysis JSON directly (`@sabaki/gtp` is GTP-only, skip); WASM offline deferred to M5
-- CPU fine for 9×9 at 50–200 visits; Dockerized, models gitignored
+**Backend — KataGo analysis server (Node):**
+- Spawns `katago analysis`, loads **HumanSL** (`b18c384nbt-humanv0`) + **strong** nets; endpoints `POST /candidates|/genmove|/evaluate`
+- No npm wrapper — speaks Analysis JSON directly (`@sabaki/gtp` is GTP-only, skip)
+- Ranks candidates by `humanPolicy` and samples White's moves proportional to it (KataGo's recommended HumanSL imitation procedure)
+- GPU (CUDA) for 9×9 at 400+ visits; models & the `katago` binary are gitignored
 
 See [`docs/TECH_STACK.md`](docs/TECH_STACK.md) for rationale & alternatives, [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for diagram + API, [`docs/KATAGO_INTEGRATION.md`](docs/KATAGO_INTEGRATION.md) for engine details.
 
@@ -81,17 +82,79 @@ go_game/
 
 See [`PLAN.md`](PLAN.md) for detailed tasks.
 
-## Running (planned)
+## Setup from scratch
+
+The KataGo binary and the model weights are large and are **gitignored** (see `.gitignore`); they are never committed. Follow the steps below after cloning.
+
+### 1. Install frontend & server deps
 
 ```bash
-# frontend
-cd app && npm install && npm run dev   # http://localhost:5173
+cd app    && npm install
+cd ../server && npm install
+```
 
-# server (needs katago binary + model in server/models/)
-cd server && npm install && npm run dev # http://localhost:3001
+### 2. Fetch the KataGo binary
 
-# docker (engine + models)
-docker compose up
+The server spawns `katago analysis`. Download a prebuilt binary and place it at `server/katago`:
+
+```bash
+# CUDA build (recommended for a real GPU):
+curl -L -o /tmp/katago.zip \
+  https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-v1.15.3-cuda12.1-cudnn8.9.7-linux-x64.zip
+unzip -o /tmp/katago.zip -d /tmp/katago
+cp /tmp/katago/katago server/katago && chmod +x server/katago
+```
+
+If you don't have CUDA/cuDNN, use the **Eigen (CPU)** build instead — fine for 9×9 up to a few hundred visits. Without any binary, the server runs in **mock** mode (no KataGo).
+
+**Optional GPU libs:** the CUDA build needs `libcublas.so.12`, `libcudnn.so.8`, and the `cuda` drivers; the engine also needs `libzip.so.5`/`libssl.so.1.1`. On a typical CUDA install, set:
+
+```bash
+export LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:/tmp/libs/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+```
+
+### 3. Fetch the KataGo models
+
+```bash
+./server/scripts/download-models.sh
+```
+
+This downloads the HumanSL net (`b18c384nbt-humanv0.bin.gz`) to `server/models/human.bin.gz`, a strong net to `server/models/strong.bin.gz`, and writes a 9×9-tuned `server/config/analysis.cfg`. (Edit the script's `KATAGO_*_MODEL_URL` vars to pin different nets.)
+
+### 4. Run in real mode
+
+```bash
+cd server
+export KATAGO_MODE=real \
+       KATAGO_BIN=./katago \
+       KATAGO_MODEL=./models/strong.bin.gz \
+       KATAGO_HUMAN_MODEL=./models/b18c384nbt-humanv0.bin.gz \
+       LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:/tmp/libs/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+npm run dev   # http://localhost:3001
+```
+
+`server/models/*.bin.gz` paths are resolved relative to the server module, so absolute `/home/...` paths are not needed.
+
+### 5. Run the app
+
+```bash
+cd app && npm run dev   # http://localhost:5173  (proxies /api -> :3001)
+```
+
+### Docker
+
+`docker compose up` builds the server. The Dockerfile defaults to **mock** mode (`KATAGO_MODE=mock`) because the real binary/models are large and host-specific; mount them at runtime to use `real`:
+
+```bash
+KATAGO_MODE=real docker compose up
+```
+
+### Verify
+
+```bash
+curl http://localhost:3001/health   # {"ok":true,"mode":"real",...}
+curl -X POST http://localhost:3001/candidates -H 'Content-Type: application/json' \
+  -d '{"board":[[0,0,0,0,0,0,0,0,0],...],"toMove":"B","rank":"3d","n":5,"strategy":"good-vs-tempting","maxVisits":400}'
 ```
 
 ## Contributing
