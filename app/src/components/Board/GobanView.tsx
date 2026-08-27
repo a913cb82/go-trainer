@@ -74,9 +74,8 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
         {/* current candidates — always faint, never tinted by old feedback */}
         {candidates && candidates.map(c=>{
           const cx = PAD + c.x*CELL, cy= PAD + c.y*CELL
-          return <g key={`cand-${c.label}`} style={{cursor:'pointer'}} onClick={()=>onVertexClick(c.x,c.y)}>
+          return <g key={`cand-${c.x}-${c.y}`} style={{cursor:'pointer'}} onClick={()=>onVertexClick(c.x,c.y)}>
             <circle cx={cx} cy={cy} r={15} fill="#fff7cc" fillOpacity={0.32} stroke="#7a5a1a" strokeOpacity={0.45} strokeWidth={1.4} strokeDasharray="4 3"/>
-            <text x={cx} y={cy+4} textAnchor="middle" fontSize={12} fontWeight={700} fill="#7a5a1a" opacity={0.75}>{c.label}</text>
           </g>
         })}
         {/* click targets — below feedback so feedback stays visible */}
@@ -92,15 +91,12 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           if(isPicked) return null
           const cx = PAD + e.x*CELL, cy= PAD + e.y*CELL
           const {hex, bg} = gapColor(e.gap, rank)
-          const isOverlap = candMap.has(`${e.x},${e.y}`)
-          const ox = isOverlap ? 11 : 0
-          const oy = isOverlap ? -11 : 0
           const pts = e.strongScore ?? 0
           const win = Math.round((e.strongWinrate ?? 0.5)*100)
-          return <g key={`eval-${e.label}`} style={{pointerEvents:'none'}}>
-            <circle cx={cx+ox} cy={cy+oy} r={isOverlap? 9 : 12} fill={bg} fillOpacity={0.96} stroke={hex} strokeWidth={1.8} strokeOpacity={1}/>
-            <text x={cx+ox} y={cy+oy+1} textAnchor="middle" fontSize={isOverlap?6.5:8.5} fontWeight={800} fill={hex}>{pts>=0?'+':''}{(pts).toFixed(1)}</text>
-            <text x={cx+ox} y={cy+oy+9} textAnchor="middle" fontSize={isOverlap?5.5:6.5} fontWeight={700} fill={hex} opacity={0.85}>{win}%</text>
+          return <g key={`eval-${e.x}-${e.y}`} style={{pointerEvents:'none'}}>
+            <circle cx={cx} cy={cy} r={12} fill={bg} fillOpacity={0.96} stroke={hex} strokeWidth={1.8} strokeOpacity={1}/>
+            <text x={cx} y={cy+1} textAnchor="middle" fontSize={8.5} fontWeight={800} fill={hex}>{pts>=0?'+':''}{(pts).toFixed(1)}</text>
+            <text x={cx} y={cy+9} textAnchor="middle" fontSize={6.5} fontWeight={700} fill={hex} opacity={0.85}>{win}%</text>
           </g>
         })}
         {/* coordinates */}
