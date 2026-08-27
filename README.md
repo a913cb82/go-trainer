@@ -28,9 +28,3 @@ cd server && KATAGO_MODE=real npm run dev  # :3001
 cd app && npm run dev                       # :5173 proxies /api → :3001
 curl http://localhost:3001/health
 ```
-
-Or with Docker (mock without models):
-
-```bash
-docker compose up  # :3001 + :5173
-```

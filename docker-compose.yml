@@ -7,7 +7,7 @@ services:
       - ./server/config:/app/config:ro
     environment:
       PORT: 3001
-      KATAGO_MODE: mock
+      KATAGO_MODE: real
   app:
     image: node:20-slim
     working_dir: /app

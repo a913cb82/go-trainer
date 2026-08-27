@@ -2,7 +2,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { z } from 'zod'
 import { RANKS } from './types.js'
-import { mockCandidates, mockGenmove, mockEvaluate, KatagoEngine } from './katago.js'
+import { KatagoEngine } from './katago.js'
 
 const app = Fastify({logger:true})
 await app.register(cors, {origin:true})
@@ -59,62 +59,55 @@ const candidatesBody = z.object({
 app.post('/candidates', async(req, reply)=>{
   const parsed = candidatesBody.safeParse(req.body)
   if(!parsed.success) return reply.code(400).send({error: parsed.error.flatten()})
-  const {board, rank, n, strategy, maxVisits, history} = parsed.data
+  const {board, rank, n, maxVisits, history} = parsed.data
   const profile = 'rank_' + String(rank)
-  if(engine.mode==='real'){
-    try{
-      const sign = board as number[][]
-      const pos = positionArgs(sign, history, 'B')
-      const query = {
-        id: `c-${Date.now()}`,
-        ...pos,
-        rules: 'japanese',
-        komi: 7,
-        boardXSize: 9,
-        boardYSize: 9,
-        analyzeTurns: [pos.moves.length],
-        maxVisits,
-        includePolicy: true,
-        includeOwnership: false,
-        overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
-      }
-      const res = await engine.query(query, 15000) as any
-      const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
-      // Human-style candidates are ranked by the HumanSL policy, not MCTS result order.
-      const humanInfos = [...infos].sort((a,b)=> humanPrior(b)-humanPrior(a))
-      const bestScore = humanInfos.reduce((m:number, i:any)=> Math.max(m, Number(i.scoreLead ?? i.scoreMean ?? 0)), -Infinity)
-      const seen = new Set<string>()
-      const mapped: any[] = []
-      for(const info of humanInfos){
-        if(mapped.length>=n) break
-        const point = moveCoord(info)
-        if(!point || point.pass) continue
-        const {x,y} = point
-        const key = `${x},${y}`
-        if(seen.has(key)) continue
-        seen.add(key)
-        const score = Number(info.scoreLead ?? info.scoreMean ?? 0)
-        const gap = bestScore - score
-        mapped.push({
-          x, y,
-          label: 'ABCDE'[mapped.length % 5] || 'A',
-          humanPolicy: humanPrior(info),
-          strongWinrate: info.winrate ?? 0.5,
-          strongScore: score,
-          scoreGap: Math.max(0, Math.round(gap*10)/10),
-          tag: gap <= 1.5 ? 'good' : gap >= 4 ? 'overconcentrated' : 'ok'
-        })
-      }
-      return { moves: mapped, meta: { humanModel: 'b18c384nbt-humanv0', strongModel: 'strong', visits: maxVisits || 150, mode: 'real', profile } }
-    } catch (e: any) {
-      console.error('Real candidates error:', e.message)
-      if(process.env.KATAGO_MODE==='real') return reply.code(500).send({error: e.message})
-      const moves = mockCandidates(board as any, rank as any, n, strategy as any, maxVisits)
-      return { moves, meta: { mode: 'mock-fallback', error: e.message, visits: maxVisits || 150 } }
+  try{
+    const sign = board as number[][]
+    const pos = positionArgs(sign, history, 'B')
+    const query = {
+      id: `c-${Date.now()}`,
+      ...pos,
+      rules: 'japanese',
+      komi: 7,
+      boardXSize: 9,
+      boardYSize: 9,
+      analyzeTurns: [pos.moves.length],
+      maxVisits,
+      includePolicy: true,
+      includeOwnership: false,
+      overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
     }
+    const res = await engine.query(query, 15000) as any
+    const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
+    const humanInfos = [...infos].sort((a,b)=> humanPrior(b)-humanPrior(a))
+    const bestScore = humanInfos.reduce((m:number, i:any)=> Math.max(m, Number(i.scoreLead ?? i.scoreMean ?? 0)), -Infinity)
+    const seen = new Set<string>()
+    const mapped: any[] = []
+    for(const info of humanInfos){
+      if(mapped.length>=n) break
+      const point = moveCoord(info)
+      if(!point || point.pass) continue
+      const {x,y} = point
+      const key = `${x},${y}`
+      if(seen.has(key)) continue
+      seen.add(key)
+      const score = Number(info.scoreLead ?? info.scoreMean ?? 0)
+      const gap = bestScore - score
+      mapped.push({
+        x, y,
+        label: 'ABCDE'[mapped.length % 5] || 'A',
+        humanPolicy: humanPrior(info),
+        strongWinrate: info.winrate ?? 0.5,
+        strongScore: score,
+        scoreGap: Math.max(0, Math.round(gap*10)/10),
+        tag: gap <= 1.5 ? 'good' : gap >= 4 ? 'overconcentrated' : 'ok'
+      })
+    }
+    return { moves: mapped, meta: { humanModel: 'b18c384nbt-humanv0', strongModel: 'strong', visits: maxVisits || 150, mode: 'real', profile } }
+  } catch (e: any) {
+    console.error('Real candidates error:', e.message)
+    return reply.code(500).send({error: e.message})
   }
-  const moves = mockCandidates(board as any, rank as any, n, strategy as any, maxVisits)
-  return { moves, meta: { humanModel: 'mock', strongModel: 'mock', visits: maxVisits || 150, mode: engine.mode } }
 })
 
 const genmoveBody = z.object({
@@ -130,38 +123,31 @@ app.post('/genmove', async(req, reply)=>{
   if(!p.success) return reply.code(400).send({error:p.error.flatten()})
   const {board, toMove, rank, maxVisits, history} = p.data
   const profile = 'rank_' + String(rank)
-  if(engine.mode==='real'){
-    try{
-      const sign = board as number[][]
-      const pos = positionArgs(sign, history, toMove)
-      const res = await engine.query({ id: `g-${Date.now()}`, ...pos, rules: 'japanese', komi: 7, boardXSize: 9, boardYSize: 9, analyzeTurns: [pos.moves.length], maxVisits: maxVisits || 150, includePolicy: true, includeOwnership: false, overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false } }, 15000) as any
-      const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
-      const top = (res?.moveInfos || res?.result?.moveInfos || []).find((info:any)=> info.order===0) || res?.moveInfos?.[0] || res?.result?.moveInfos?.[0]
-      // Recommended HumanSL play: if search says pass, pass; otherwise sample by humanPolicy.
-      const pool = infos.length ? infos : (top ? [top] : [])
-      const total = pool.reduce((sum:number, info:any)=> sum + humanPrior(info), 0)
-      let pick = pool[0]
-      if(total>0){
-        let r = Math.random()*total
-        for(const info of pool){
-          r -= humanPrior(info)
-          if(r<=0){ pick=info; break }
-        }
+  try{
+    const sign = board as number[][]
+    const pos = positionArgs(sign, history, toMove)
+    const res = await engine.query({ id: `g-${Date.now()}`, ...pos, rules: 'japanese', komi: 7, boardXSize: 9, boardYSize: 9, analyzeTurns: [pos.moves.length], maxVisits: maxVisits || 150, includePolicy: true, includeOwnership: false, overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false } }, 15000) as any
+    const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
+    const top = (res?.moveInfos || res?.result?.moveInfos || []).find((info:any)=> info.order===0) || res?.moveInfos?.[0] || res?.result?.moveInfos?.[0]
+    const pool = infos.length ? infos : (top ? [top] : [])
+    const total = pool.reduce((sum:number, info:any)=> sum + humanPrior(info), 0)
+    let pick = pool[0]
+    if(total>0){
+      let r = Math.random()*total
+      for(const info of pool){
+        r -= humanPrior(info)
+        if(r<=0){ pick=info; break }
       }
-      if(top && String(top.move)==='pass') return { move: { x: 4, y: 4, pass: true }, winrate: top.winrate || 0.5, scoreLead: top.scoreLead || 0 }
-      if(!pick) throw new Error('KataGo returned no legal move')
-      const point = moveCoord(pick)
-      if(!point || point.pass) throw new Error('KataGo returned no playable human move')
-      return { move: point, winrate: pick.winrate || 0.5, scoreLead: pick.scoreLead || 0 }
-    } catch (e: any) {
-      console.error('Real genmove error:', e.message)
-      if(process.env.KATAGO_MODE==='real') return reply.code(500).send({error: e.message})
-      const m = mockGenmove(board as any, rank as any, maxVisits)
-      return { move: { x: m.x, y: m.y, pass: false }, winrate: m.winrate, scoreLead: m.scoreLead }
     }
+    if(top && String(top.move)==='pass') return { move: { x: 4, y: 4, pass: true }, winrate: top.winrate || 0.5, scoreLead: top.scoreLead || 0 }
+    if(!pick) throw new Error('KataGo returned no legal move')
+    const point = moveCoord(pick)
+    if(!point || point.pass) throw new Error('KataGo returned no playable human move')
+    return { move: point, winrate: pick.winrate || 0.5, scoreLead: pick.scoreLead || 0 }
+  } catch (e: any) {
+    console.error('Real genmove error:', e.message)
+    return reply.code(500).send({error: e.message})
   }
-  const m = mockGenmove(board as any, rank as any, maxVisits)
-  return { move: { x: m.x, y: m.y, pass: false }, winrate: m.winrate, scoreLead: m.scoreLead }
 })
 
 const evaluateBody = z.object({
@@ -177,50 +163,39 @@ app.post('/evaluate', async(req, reply)=>{
   if(!p.success) return reply.code(400).send({error:p.error.flatten()})
   const {board, move, toMove, maxVisits, rank, history} = p.data as any
   const profile = 'rank_' + String(rank || '10k')
-  if(engine.mode==='real'){
-    try{
-      const sign = board as number[][]
-      const pos = positionArgs(sign, history, toMove)
-      // also include the move to evaluate as next move
-      const evalCoord = colChar(move.x)+(9-move.y)
-      const query = {
-        id: `e-${Date.now()}`,
-        moves: [...pos.moves, [toMove, evalCoord] as [string,string]],
-        initialStones: pos.initialStones,
-        rules: 'japanese',
-        komi: 7,
-        boardXSize: 9,
-        boardYSize: 9,
-        analyzeTurns: [pos.moves.length],
-        maxVisits: maxVisits || 50,
-        includeOwnership: true,
-        includePolicy: true,
-        overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
-      }
-      const res = await engine.query(query, 15000) as any
-      const own = res?.ownership || res?.result?.ownership || []
-      // KataGo returns ownership as a flat row-major array of 81 floats; reshape to 9x9.
-      const ownership = Array.isArray(own) && own.length===81
-        ? Array.from({length:9},(_,y)=> own.slice(y*9,(y+1)*9))
-        : Array.from({length:9},()=>Array(9).fill(0))
-      // The evaluated move is the LAST move (at turn pos.moves.length). The value of the
-      // position after it is rootInfo; the move's own winrate/scoreLead are also in moveInfos
-      // if it was searched. Prefer the evaluated moveInfo, fall back to rootInfo's root value.
-      const infos = res?.moveInfos || res?.result?.moveInfos || []
-      const root = res?.rootInfo || res?.result?.rootInfo || {}
-      const byMove = (res?.roots?.[0]?.childInfos || []).find((c:any)=> c.move===evalCoord) || infos.find((c:any)=> c.move===evalCoord)
-      const winrate = byMove?.winrate ?? root.winrate ?? 0.5
-      const scoreLead = byMove?.scoreLead ?? root.scoreLead ?? 0
-      return { winrate: Number(winrate) || 0.5, scoreLead: Number(scoreLead) || 0, ownership }
-    } catch (e: any) {
-      console.error('Real evaluate error:', e.message)
-      if(process.env.KATAGO_MODE==='real') return reply.code(500).send({error: e.message})
-      const r = mockEvaluate(board as any, move, maxVisits)
-      return r
+  try{
+    const sign = board as number[][]
+    const pos = positionArgs(sign, history, toMove)
+    const evalCoord = colChar(move.x)+(9-move.y)
+    const query = {
+      id: `e-${Date.now()}`,
+      moves: [...pos.moves, [toMove, evalCoord] as [string,string]],
+      initialStones: pos.initialStones,
+      rules: 'japanese',
+      komi: 7,
+      boardXSize: 9,
+      boardYSize: 9,
+      analyzeTurns: [pos.moves.length],
+      maxVisits: maxVisits || 50,
+      includeOwnership: true,
+      includePolicy: true,
+      overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
     }
+    const res = await engine.query(query, 15000) as any
+    const own = res?.ownership || res?.result?.ownership || []
+    const ownership = Array.isArray(own) && own.length===81
+      ? Array.from({length:9},(_,y)=> own.slice(y*9,(y+1)*9))
+      : Array.from({length:9},()=>Array(9).fill(0))
+    const infos = res?.moveInfos || res?.result?.moveInfos || []
+    const root = res?.rootInfo || res?.result?.rootInfo || {}
+    const byMove = (res?.roots?.[0]?.childInfos || []).find((c:any)=> c.move===evalCoord) || infos.find((c:any)=> c.move===evalCoord)
+    const winrate = byMove?.winrate ?? root.winrate ?? 0.5
+    const scoreLead = byMove?.scoreLead ?? root.scoreLead ?? 0
+    return { winrate: Number(winrate) || 0.5, scoreLead: Number(scoreLead) || 0, ownership }
+  } catch (e: any) {
+    console.error('Real evaluate error:', e.message)
+    return reply.code(500).send({error: e.message})
   }
-  const r = mockEvaluate(board as any, move, maxVisits)
-  return r
 })
 
 const port = Number(process.env.PORT||3001)

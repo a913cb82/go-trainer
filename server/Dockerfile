@@ -6,6 +6,5 @@ COPY dist ./dist
 COPY config ./config
 # models mounted at runtime: -v ./models:/app/models
 EXPOSE 3001
-ENV PORT=3001 KATAGO_MODE=mock
+ENV PORT=3001 KATAGO_MODE=real
 CMD ["node","dist/index.js"]
-# For real KataGo: base image needs katago binary installed; mount models/*.bin.gz
