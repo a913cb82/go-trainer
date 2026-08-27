@@ -109,7 +109,7 @@ export default function App(){
     <h1 style={{margin:'4px 0'}}>Go 9×9 — KataGo HumanSL</h1>
     <p style={{color:'#555', marginTop:0}}>Play Black vs {s.rank} bot (White). {freePlay ? 'Free play — click anywhere.' : 'Pick A–E each turn, then see feedback.'}</p>
 
-    <RankSelector rank={s.rank} n={s.n} strategy={s.strategy} onRank={s.setRank} onN={s.setN} onStrategy={s.setStrategy} disabled={s.history.length>0 && s.status==='playing'} />
+    <RankSelector rank={s.rank} n={s.n} strategy={s.strategy} onRank={r=>{s.setRank(r); if(s.candidates) s.setCandidates(null)}} onN={n=>{s.setN(n); if(s.candidates) s.setCandidates(null)}} onStrategy={strat=>{s.setStrategy(strat); if(s.candidates) s.setCandidates(null)}} disabled={false} />
     <div style={{display:'flex', gap:8, margin:'12px 0', flexWrap:'wrap'}}>
       <button onClick={()=>{s.newGame(); setReviewIdx(null)}}>New game</button>
       <button onClick={()=>s.undo()} disabled={s.history.length===0}>Undo</button>
