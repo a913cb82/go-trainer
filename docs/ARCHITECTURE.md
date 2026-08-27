@@ -12,6 +12,8 @@ Android (Capacitor): WebView --bridge--> Native plugin -> katago (NDK Eigen arm6
 
 Offline: `@sabaki/go-board` handles legality; on Android the `server/` runs on-device via plugin (no remote).
 
+Dual runtime (single codebase): `app/src/lib/katagoClient.ts` abstracts transport — `Capacitor.isNativePlatform() ? KataGoPlugin.query() : fetch('/api')`. Same types/protocol, WSL dev on `:3001` unchanged.
+
 ## Frontend `app/`
 
 ```

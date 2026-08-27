@@ -73,6 +73,7 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 ## M4 — Android (Capacitor Native, on-device) — chosen (1)
 
 - [ ] Native KataGo: NDK `arm64-v8a` Eigen build, `katago` + `b18c384`/`strong` in `filesDir`, `ProcessBuilder` plugin (same JSON protocol)
+- [ ] Transport: `katagoClient.ts` → `Capacitor.isNativePlatform() ? Plugin : fetch('/api')` — keeps WSL `:3001` working; same `dist/`
 - [ ] PWA + Capacitor: `cap init/add/sync`, `cap open android`, PWA audit (icons 512, `standalone`, Workbox), touch/haptics/safe-area, first-launch model download
 - [ ] Store: signed AAB → Play Console
 
