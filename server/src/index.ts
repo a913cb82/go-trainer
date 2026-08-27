@@ -108,6 +108,7 @@ app.post('/candidates', async(req, reply)=>{
       return { moves: mapped, meta: { humanModel: 'b18c384nbt-humanv0', strongModel: 'strong', visits: maxVisits || 150, mode: 'real', profile } }
     } catch (e: any) {
       console.error('Real candidates error:', e.message)
+      if(process.env.KATAGO_MODE==='real') return reply.code(500).send({error: e.message})
       const moves = mockCandidates(board as any, rank as any, n, strategy as any, maxVisits)
       return { moves, meta: { mode: 'mock-fallback', error: e.message, visits: maxVisits || 150 } }
     }
@@ -154,6 +155,7 @@ app.post('/genmove', async(req, reply)=>{
       return { move: point, winrate: pick.winrate || 0.5, scoreLead: pick.scoreLead || 0 }
     } catch (e: any) {
       console.error('Real genmove error:', e.message)
+      if(process.env.KATAGO_MODE==='real') return reply.code(500).send({error: e.message})
       const m = mockGenmove(board as any, rank as any, maxVisits)
       return { move: { x: m.x, y: m.y, pass: false }, winrate: m.winrate, scoreLead: m.scoreLead }
     }
@@ -212,6 +214,7 @@ app.post('/evaluate', async(req, reply)=>{
       return { winrate: Number(winrate) || 0.5, scoreLead: Number(scoreLead) || 0, ownership }
     } catch (e: any) {
       console.error('Real evaluate error:', e.message)
+      if(process.env.KATAGO_MODE==='real') return reply.code(500).send({error: e.message})
       const r = mockEvaluate(board as any, move, maxVisits)
       return r
     }

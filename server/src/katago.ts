@@ -136,9 +136,16 @@ export class KatagoEngine {
 
   constructor(){
     const bin = process.env.KATAGO_BINARY || process.env.KATAGO_BIN || './katago'
-    // check exists only if absolute path; otherwise try spawn and fallback
     this.mode = 'mock'
-    if(process.env.KATAGO_MODE==='real' || existsSync(bin)){
+    if(process.env.KATAGO_MODE==='real'){
+      if(!existsSync(bin)) throw new Error(`KATAGO_MODE=real but binary not found at ${bin} — run ./server/scripts/download-models.sh`)
+      if(!existsSync(defaultModel)) throw new Error(`KATAGO_MODE=real but model not found at ${defaultModel}`)
+      if(!existsSync(defaultHumanModel)) throw new Error(`KATAGO_MODE=real but human model not found at ${defaultHumanModel}`)
+      if(!existsSync(defaultConfig)) throw new Error(`KATAGO_MODE=real but config not found at ${defaultConfig}`)
+      this.spawn(bin); this.mode='real'
+      return
+    }
+    if(existsSync(bin)){
       try { this.spawn(bin); this.mode='real' } catch { this.mode='mock' }
     }
   }
