@@ -1,7 +1,5 @@
 # go-trainer
 
-> 9×9 Go vs KataGo HumanSL — pick from *n* moves, get points-based feedback.
-
 ![go-trainer screenshot](media/screenshot.png)
 
 ## How it plays
