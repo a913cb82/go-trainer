@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { GobanView } from './components/Board/GobanView'
 import { RankSelector } from './components/RankSelector'
-import { FeedbackPanel } from './components/FeedbackPanel'
 import { WinrateGraph } from './components/WinrateGraph'
 import { useGame, boardSignMap } from './store/gameStore'
 import { katago } from './lib/katagoClient'
@@ -135,7 +134,6 @@ export default function App(){
         <label style={{fontSize:13}}><input type="checkbox" checked={s.feedbackScope==='picked'} onChange={e=> s.setFeedbackScope(e.target.checked ? 'picked' : 'all')} /> Only my pick</label>
         <button onClick={()=> s.clearEvaluations()} style={{fontSize:12, padding:'4px 8px'}}>Clear</button>
       </div>}
-      {filteredEvals && <FeedbackPanel evals={filteredEvals} rank={s.rank} />}
       <WinrateGraph history={s.winrateHistory} />
       <div style={{fontSize:13, color:'#444'}}>
         Moves: {s.history.length} · To move: {s.toMove===1?'B':'W'} · Status: {s.status} · Score est area: {(()=>
