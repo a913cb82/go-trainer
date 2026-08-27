@@ -12,7 +12,7 @@ function starPoints(): [number,number][] {
   return [[2,2],[2,6],[6,2],[6,6],[4,4]]
 }
 
-export function GobanView({board, candidates, evaluations, lastMove, onVertexClick}:{board:Board, candidates:Candidate[]|null, evaluations:(Candidate & {gap:number})[]|null, lastMove?:[number,number], onVertexClick:(x:number,y:number)=>void}){
+export function GobanView({board, candidates, evaluations, lastMove, feedbackMove, onVertexClick}:{board:Board, candidates:Candidate[]|null, evaluations:(Candidate & {gap:number})[]|null, lastMove?:[number,number], feedbackMove?:[number,number], onVertexClick:(x:number,y:number)=>void}){
   const signMap = toSignMap(board)
   const candMap = new Map<string, Candidate>()
   if(candidates) for(const c of candidates) candMap.set(`${c.x},${c.y}`, c)
@@ -42,16 +42,25 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
             <circle cx={cx} cy={cy} r={16} fill={v===1?'#111':'#fdf8ec'} stroke={v===1?'#000':'#8a7040'} strokeWidth={0.8}/>
           </g>
         }))}
-        {/* last-move halo — on top of stones, outside stone so visible, colored by feedback */}
+        {/* last-move marker (enemy or any) — small ring */}
         {lastMove && (()=>{
           const [lx,ly] = lastMove
           if(signMap[ly]?.[lx]===0) return null
+          // don't double-draw if feedback halo already covers same stone
+          if(feedbackMove && lx===feedbackMove[0] && ly===feedbackMove[1]) return null
           const cx = PAD + lx*CELL, cy= PAD + ly*CELL
-          const lastGap = evaluations?.find(e=> e.x===lx && e.y===ly)?.gap
-          const haloCol = lastGap===undefined ? '#fff' : lastGap>0.04 ? '#c0392b' : lastGap>0.02 ? '#b7791f' : '#27864a'
-          const haloW = lastGap===undefined ? 2 : 3.5
-          const r = lastGap===undefined ? 7 : 19
-          return <circle cx={cx} cy={cy} r={r} fill="none" stroke={haloCol} strokeWidth={haloW} opacity={0.98} style={{pointerEvents:'none'}}/>
+          const v = signMap[ly][lx]
+          return <circle cx={cx} cy={cy} r={7} fill="none" stroke={v===1?'#fff':'#111'} strokeWidth={2} opacity={0.9} style={{pointerEvents:'none'}}/>
+        })()}
+        {/* feedback halo for your last move — colored outer ring, stays after enemy moves */}
+        {feedbackMove && (()=>{
+          const [lx,ly] = feedbackMove
+          if(signMap[ly]?.[lx]===0) return null
+          const cx = PAD + lx*CELL, cy= PAD + ly*CELL
+          const gap = evaluations?.find(e=> e.x===lx && e.y===ly)?.gap
+          if(gap===undefined) return null
+          const col = gap>0.04 ? '#c0392b' : gap>0.02 ? '#b7791f' : '#27864a'
+          return <circle cx={cx} cy={cy} r={19} fill="none" stroke={col} strokeWidth={3.5} opacity={0.95} style={{pointerEvents:'none'}}/>
         })()}
         {/* current candidates — always faint, never tinted by old feedback */}
         {candidates && candidates.map(c=>{
@@ -67,10 +76,10 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
           if(candMap.has(`${x},${y}`)) return null
           return <circle key={`hit-${x}-${y}`} cx={cx} cy={cy} r={14} fill="transparent" style={{cursor:'pointer'}} onClick={()=>onVertexClick(x,y)}/>
         }))}
-        {/* feedback for PREVIOUS turn — on top of everything */}
+        {/* feedback alternatives — on top of everything */}
         {evaluations && evaluations.map(e=>{
-          if(signMap[e.y]?.[e.x]!==0 && !(lastMove && e.x===lastMove[0] && e.y===lastMove[1])) return null
-          const isPicked = lastMove && e.x===lastMove[0] && e.y===lastMove[1]
+          if(signMap[e.y]?.[e.x]!==0 && !(feedbackMove && e.x===feedbackMove[0] && e.y===feedbackMove[1])) return null
+          const isPicked = feedbackMove && e.x===feedbackMove[0] && e.y===feedbackMove[1]
           if(isPicked) return null
           const cx = PAD + e.x*CELL, cy= PAD + e.y*CELL
           const col = e.gap>0.04 ? '#c0392b' : e.gap>0.02 ? '#b7791f' : '#27864a'
