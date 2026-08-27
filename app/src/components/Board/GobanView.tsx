@@ -1,6 +1,7 @@
 import type { Board } from '../../lib/goban'
-import type { Candidate } from '../../lib/katagoClient'
+import type { Candidate, Rank } from '../../lib/katagoClient'
 import { toSignMap } from '../../lib/goban'
+import { gapColor } from '../../lib/rank'
 
 const SIZE = 9
 const CELL = 36
@@ -12,7 +13,7 @@ function starPoints(): [number,number][] {
   return [[2,2],[2,6],[6,2],[6,6],[4,4]]
 }
 
-export function GobanView({board, candidates, evaluations, lastMove, feedbackMove, onVertexClick}:{board:Board, candidates:Candidate[]|null, evaluations:(Candidate & {gap:number})[]|null, lastMove?:[number,number], feedbackMove?:[number,number], onVertexClick:(x:number,y:number)=>void}){
+export function GobanView({board, candidates, evaluations, lastMove, feedbackMove, rank, onVertexClick}:{board:Board, candidates:Candidate[]|null, evaluations:(Candidate & {gap:number})[]|null, lastMove?:[number,number], feedbackMove?:[number,number], rank: Rank, onVertexClick:(x:number,y:number)=>void}){
   const signMap = toSignMap(board)
   const candMap = new Map<string, Candidate>()
   if(candidates) for(const c of candidates) candMap.set(`${c.x},${c.y}`, c)
@@ -52,14 +53,14 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           const v = signMap[ly][lx]
           return <circle cx={cx} cy={cy} r={7} fill="none" stroke={v===1?'#fff':'#111'} strokeWidth={2} opacity={0.9} style={{pointerEvents:'none'}}/>
         })()}
-        {/* feedback halo for your last move — colored outer ring, stays after enemy moves */}
+        {/* feedback halo for your last move — rank-graduated, stays after enemy moves */}
         {feedbackMove && (()=>{
           const [lx,ly] = feedbackMove
           if(signMap[ly]?.[lx]===0) return null
           const cx = PAD + lx*CELL, cy= PAD + ly*CELL
           const gap = evaluations?.find(e=> e.x===lx && e.y===ly)?.gap
           if(gap===undefined) return null
-          const col = gap>0.04 ? '#c0392b' : gap>0.02 ? '#b7791f' : '#27864a'
+          const col = gapColor(gap, rank).hex
           return <circle cx={cx} cy={cy} r={19} fill="none" stroke={col} strokeWidth={3.5} opacity={0.95} style={{pointerEvents:'none'}}/>
         })()}
         {/* current candidates — always faint, never tinted by old feedback */}
@@ -76,20 +77,19 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           if(candMap.has(`${x},${y}`)) return null
           return <circle key={`hit-${x}-${y}`} cx={cx} cy={cy} r={14} fill="transparent" style={{cursor:'pointer'}} onClick={()=>onVertexClick(x,y)}/>
         }))}
-        {/* feedback alternatives — on top of everything */}
+        {/* feedback alternatives — rank-graduated, on top */}
         {evaluations && evaluations.map(e=>{
           if(signMap[e.y]?.[e.x]!==0 && !(feedbackMove && e.x===feedbackMove[0] && e.y===feedbackMove[1])) return null
           const isPicked = feedbackMove && e.x===feedbackMove[0] && e.y===feedbackMove[1]
           if(isPicked) return null
           const cx = PAD + e.x*CELL, cy= PAD + e.y*CELL
-          const col = e.gap>0.04 ? '#c0392b' : e.gap>0.02 ? '#b7791f' : '#27864a'
-          const bg = e.gap>0.04 ? '#ffcccc' : e.gap>0.02 ? '#fff6b0' : '#c8f0c8'
+          const {hex, bg} = gapColor(e.gap, rank)
           const isOverlap = candMap.has(`${e.x},${e.y}`)
           const ox = isOverlap ? 11 : 0
           const oy = isOverlap ? -11 : 0
           return <g key={`eval-${e.label}`} style={{pointerEvents:'none'}}>
-            <circle cx={cx+ox} cy={cy+oy} r={isOverlap? 8 : 10} fill={bg} fillOpacity={0.96} stroke={col} strokeWidth={1.8} strokeOpacity={1}/>
-            <text x={cx+ox} y={cy+oy+3.5} textAnchor="middle" fontSize={isOverlap?7:9} fontWeight={800} fill={col}>{e.label}</text>
+            <circle cx={cx+ox} cy={cy+oy} r={isOverlap? 8 : 10} fill={bg} fillOpacity={0.96} stroke={hex} strokeWidth={1.8} strokeOpacity={1}/>
+            <text x={cx+ox} y={cy+oy+3.5} textAnchor="middle" fontSize={isOverlap?7:9} fontWeight={800} fill={hex}>{e.label}</text>
           </g>
         })}
         {/* coordinates */}

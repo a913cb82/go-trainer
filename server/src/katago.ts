@@ -33,27 +33,28 @@ function mockPolicyScore(x:number,y:number, rank:Rank): number{
   const cornerBonus = (i < 3 ? 0.03 : 0) * ((x<2||x>6)&&(y<2||y>6)?1:0)
   return 0.05 + Math.random()*0.05 + centerBonus + cornerBonus
 }
-function mockStrongWinrate(x:number,y:number, signMap:number[][]): number{
-  // simple: prefer moves near existing stones, corners early
+function mockStrongWinrate(x:number,y:number, signMap:number[][], maxVisits=150): number{
+  // heuristic + visit-scaled noise (no tree search in mock; real KataGo uses visits)
   const neighbors = [[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>{
     const nx=x+dx, ny=y+dy; return nx>=0&&nx<9&&ny>=0&&ny<9&&signMap[ny][nx]!==0
   }).length
-  const base = 0.48 + neighbors*0.02 + (Math.random()-0.5)*0.04
-  // star points slightly better early
+  const noiseScale = Math.max(0.15, 150 / Math.max(30, maxVisits)) // more visits = less noise
+  const base = 0.48 + neighbors*0.02 + (Math.random()-0.5)*0.04*noiseScale
   const star = (x===2||x===6)&&(y===2||y===6) ? 0.02 : 0
+  // TODO: 1-ply search ahead would penalize moves that give opponent strong reply; mock omits this — real engine does MCTS
   return Math.max(0.2, Math.min(0.75, base+star))
 }
 
-export function mockCandidates(signMap:number[][], rank:Rank, n:number, strategy:Strategy){
+export function mockCandidates(signMap:number[][], rank:Rank, n:number, strategy:Strategy, maxVisits=150){
   const legal = allLegalMoves(signMap)
   if(legal.length===0) return []
   const th = thresholds(rank)
   // generate scored list
   const scored = legal.map(([x,y])=>{
     const ph = mockPolicyScore(x,y,rank)
-    const ws = mockStrongWinrate(x,y, signMap)
+    const ws = mockStrongWinrate(x,y, signMap, maxVisits)
     return {x,y,ph,ws}
-  }).sort((a,b)=> b.ph - a.ph) // sorted by human policy
+  }).sort((a,b)=> b.ph - a.ph)
 
   const bestWs = Math.max(...scored.map(s=>s.ws))
 
@@ -95,8 +96,8 @@ export function mockCandidates(signMap:number[][], rank:Rank, n:number, strategy
   return withScores.map((c,i)=>({...c, label: labels[i]}))
 }
 
-export function mockGenmove(signMap:number[][], rank:Rank){
-  const cands = mockCandidates(signMap, rank, 8, 'human-only') as any[]
+export function mockGenmove(signMap:number[][], rank:Rank, maxVisits=150){
+  const cands = mockCandidates(signMap, rank, 8, 'human-only', maxVisits) as any[]
   // weighted sample by humanPolicy
   const total = cands.reduce((s,c)=>s+c.humanPolicy,0) || 1
   let r = Math.random()*total, pick=cands[0]
@@ -104,8 +105,8 @@ export function mockGenmove(signMap:number[][], rank:Rank){
   return { x:pick.x, y:pick.y, winrate: pick.strongWinrate, scoreLead: pick.strongScore }
 }
 
-export function mockEvaluate(signMap:number[][], move:{x:number,y:number}){
-  const ws = mockStrongWinrate(move.x, move.y, signMap)
+export function mockEvaluate(signMap:number[][], move:{x:number,y:number}, maxVisits=150){
+  const ws = mockStrongWinrate(move.x, move.y, signMap, maxVisits)
   const ownership = Array.from({length:9},(_,y)=> Array.from({length:9},(_,x)=> {
     // fake ownership: near stones -> biased
     const d = Math.hypot(x-move.x, y-move.y)

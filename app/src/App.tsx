@@ -126,7 +126,7 @@ export default function App(){
     {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err} — running in mock mode if backend down.</div>}
     {loading && <div style={{color:'#666'}}>Thinking…</div>}
 
-    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={filteredEvals} lastMove={last && last.x>=0 ? [last.x, last.y] as [number,number] : undefined} feedbackMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
+    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={filteredEvals} lastMove={last && last.x>=0 ? [last.x, last.y] as [number,number] : undefined} feedbackMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} rank={s.rank} onVertexClick={onVertexClick} />
     {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted faint point (A–E) on the board</div>}
 
     <div style={{marginTop:12, display:'grid', gap:12}}>
@@ -135,7 +135,7 @@ export default function App(){
         <label style={{fontSize:13}}><input type="checkbox" checked={s.feedbackScope==='picked'} onChange={e=> s.setFeedbackScope(e.target.checked ? 'picked' : 'all')} /> Only my pick</label>
         <button onClick={()=> s.clearEvaluations()} style={{fontSize:12, padding:'4px 8px'}}>Clear</button>
       </div>}
-      {filteredEvals && <FeedbackPanel evals={filteredEvals} />}
+      {filteredEvals && <FeedbackPanel evals={filteredEvals} rank={s.rank} />}
       <WinrateGraph history={s.winrateHistory} />
       <div style={{fontSize:13, color:'#444'}}>
         Moves: {s.history.length} · To move: {s.toMove===1?'B':'W'} · Status: {s.status} · Score est area: {(()=>
