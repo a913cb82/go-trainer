@@ -10,15 +10,15 @@ Browser PWA (app/) --HTTPS--> Server (server/)
   Android wrapper  (same dist/)
 ```
 
-Offline: local `goban.ts` handles legality; candidate/genmove queue until reconnect.
+Offline: local `@sabaki/go-board` handles legality; candidate/genmove queue until reconnect.
 
 ## Frontend `app/`
 
 ```
 app/src/
-  components/Board/  # BoardSvg, Stone, Marker, OwnershipOverlay
+  components/Board/  # Shudan wrapper (signMap/paintMap) + Marker overlay
   components/        # ChoiceBar, FeedbackPanel, RankSelector, WinrateGraph
-  lib/               # goban.ts, sgf.ts, katagoClient.ts
+  lib/               # goban.ts (→ @sabaki/go-board), sgf.ts (→ @sabaki/sgf), katagoClient.ts
   store/gameStore.ts # Zustand
 ```
 
@@ -33,7 +33,7 @@ server/src/
 models/.gitignore, Dockerfile, docker-compose.yml
 ```
 
-One long-lived `katago analysis` process per model, multiplexed over stdin/stdout JSON lines, cached by board hash.
+One long-lived `katago analysis` per model, multiplexed over stdin/stdout JSON lines, cached by board hash. No npm wrapper — direct JSON (skip `@sabaki/gtp`).
 
 ## API
 
@@ -63,7 +63,7 @@ Moves shuffled; client hides `strongWinrate` until after pick.
 3. Player picks → local `goban.play()` + `POST /evaluate` for all 5 → reveal ordering.
 4. `POST /genmove` → opponent reply.
 
-Scoring: two passes → `goban.score()` + strong `scoreLead` advisory.
+Scoring: two passes → `@sabaki/go-board` area score + strong `scoreLead` advisory.
 
 ## Config
 

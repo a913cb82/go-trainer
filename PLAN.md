@@ -4,20 +4,21 @@
 
 ## Decisions to Lock Early
 
-- [ ] **Frontend framework:** React + Vite (default) vs SvelteKit. Lean React unless Svelte preference.
-- [ ] **Backend language:** Node (TS) vs Python (easier to spawn katago, but either fine — pick one and stick to it).
-- [ ] **KataGo deployment:** Hosted CPU server first; WASM deferred.
-- [ ] **Board lib:** Custom SVG (preferred for 9×9) vs wrapping `sabaki/go-board`.
-- [ ] **Capacitor vs TWA:** Capacitor for store listing; PWA alone for sideload.
+- [x] **Frontend framework:** React + Vite (default) vs SvelteKit — either works
+- [ ] **Backend language:** Node (TS) vs Python — pick one
+- [x] **KataGo deployment:** Hosted CPU server first; WASM deferred to M5 (no npm wrapper, speak JSON directly)
+- [x] **Board lib:** `@sabaki/shudan` 1.8.0 + `@sabaki/go-board` 1.4.3 — reuse, don't rewrite (`jgoboard`/`goban` are alts)
+- [x] **SGF:** `@sabaki/sgf` 3.5.0
+- [ ] **Capacitor vs TWA:** Capacitor for store listing; PWA alone for sideload
 
 ---
 
 ## M0 — Scaffold (1–2 days) — *no KataGo yet*
 
-- [ ] `app/` Vite+TS+React (or Svelte), `vite-plugin-pwa`, ESLint/Prettier, Vitest
-- [ ] 9×9 SVG board component: grid, star points, stones, last-move marker, ko/legality highlight, responsive + touch
-- [ ] Client `goban.ts`: board state, capture, ko, suicide, scoring (area JP/Chinese simple), `legalMoves()`
-- [ ] Basic play loop vs random/pseudo opponent, pass (2× ends), undo, new game, SGF export stub
+- [ ] `app/` Vite+TS+React, `vite-plugin-pwa`, ESLint/Prettier, Vitest; `npm i @sabaki/shudan @sabaki/go-board @sabaki/sgf Zustand`
+- [ ] Board via `@sabaki/shudan` (signMap/paintMap) + A–E markers, last-move/ko highlight, responsive + touch
+- [ ] Client `goban.ts` wraps `@sabaki/go-board` (capture/ko/suicide/legality); scoring via board lib + server `scoreLead`
+- [ ] Basic play loop vs random/pseudo opponent, pass (2× ends), undo, new game, SGF via `@sabaki/sgf`
 - [ ] Rank & `n` selector UI (no backend wiring yet — uses local random candidates)
 
 **Done when:** can play a full 9×9 game in browser, tap stone, see captures, on refresh still PWA shell.

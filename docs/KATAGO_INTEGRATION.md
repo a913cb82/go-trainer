@@ -10,8 +10,7 @@ Models gitignored in `server/models/`; fetched via `server/scripts/download-mode
 ## Engine
 
 Spawn `katago analysis -model <bin.gz> -config analysis.cfg -config human.cfg`.
-
-Protocol: JSON lines over stdin/stdout.
+Protocol: JSON lines over stdin/stdout. No npm lib — write ~15-line JSON handler (GTP libs `@sabaki/gtp` etc are text-protocol only, skip).
 
 Query:
 ```json

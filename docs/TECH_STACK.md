@@ -1,42 +1,41 @@
 # Tech Stack
 
-Constraint: browser app first, portable to Android with no second codebase.
+Constraint: browser first, Android via same codebase.
 
 ## Frontend: PWA + Capacitor
 
-- **Vite + TypeScript + React** (SvelteKit is the alternative — either works). Vite gives fast dev + `vite-plugin-pwa`.
-- **PWA** via `vite-plugin-pwa` → installable on Android Chrome, offline shell cached.
-- **Board:** custom SVG (9×9 is ~20 lines). Full control over A–E markers, ownership overlay. Client legality via tiny `goban.ts` (or `sabaki/go-board`); server is source of truth.
-- **State:** Zustand + TanStack Query (caching for `/candidates`).
+- **Vite + TypeScript + React** + `vite-plugin-pwa` → installable, same `dist/` in Capacitor (`npx cap add android`)
+- **State:** Zustand + TanStack Query
+
+## Reuse — Don't Rewrite
+
+| Need | Library | Verdict |
+|------|---------|---------|
+| Rules (capture/ko/suicide) | `@sabaki/go-board` 1.4.3 MIT | **Reuse** — `Board.makeMove()` handles all. Alt `online-go/goban` 8.3.226 Apache-2.0 (heavier, adds scoring) |
+| Board UI (stones, A–E markers) | `@sabaki/shudan` 1.8.0 MIT (Preact) | **Reuse** — `signMap`/`paintMap`/`ghostStoneMap`; React via `preact/compat`. Alt `jgoboard` 5.0.4 CC-BY-NC-4.0 (lighter) |
+| SGF parse/stringify | `@sabaki/sgf` 3.5.0 MIT | **Reuse** — `sgf.parse`/`stringify`, 9×9 + variations |
+
+```ts
+import {Board} from '@sabaki/go-board'
+let b = new Board(9); b = b.makeMove(3,3,1)
+import * as sgf from '@sabaki/sgf'; sgf.parse(str)
+import {Goban} from '@sabaki/shudan'; <Goban vertexSize={9} signMap={m} paintMap={p} />
+```
 
 ## Backend
 
-- **Node or Python** service spawning `katago analysis`. Pick one.
-- Two networks: **HumanSL** (opponent + candidate policy `P_h`) and **strong** (ground-truth win-rate `W_s`).
-- Endpoints: `POST /candidates`, `POST /genmove`, `POST /evaluate`. Dockerized; `models/*.bin.gz` gitignored, fetched by `scripts/download-models.sh`.
-- 9×9 at 50–200 visits runs fine on CPU. GPU optional.
+- **Node or Python** spawning `katago analysis`. No npm KataGo lib — speak Analysis JSON directly.
+- `@sabaki/gtp` 3.2.0 is GTP-only, skip for analysis engine.
+- Two nets: HumanSL + strong for `P_h`/`W_s`. Dockerized, `models/*.bin.gz` gitignored.
 
 ## KataGo Delivery
 
-- **Server first (M1).** Small frontend, easy model updates.
-- **WASM later (M5, feature-flagged).** Offline but 20–40 MB download, slower on mid Android.
-
-## Android
-
-Same `dist/`:
-
-1. **PWA alone:** Add to Home Screen — zero store work, good for beta.
-2. **Play Store:** Capacitor wrapper (`npx cap add android && npx cap sync`) or TWA/Bubblewrap. No code fork.
+- **Server first (M1).** WASM (`@multi-game-engines/adapter-katago` etc) → M5, ~95MB, deferred.
 
 ## Tooling
 
-Vitest + Playwright, ESLint/Prettier, GitHub Actions + Lighthouse CI.
-
-## Not Now
-
-No iOS, no auth (localStorage), no multiplayer.
+Vitest + Playwright, ESLint/Prettier, Lighthouse CI.
 
 ## Open
 
-- React vs Svelte — decide before M0.
-- Strong vs shared network for `W_s`.
+- React vs Svelte (either works, decide before M0)

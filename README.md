@@ -15,18 +15,17 @@ Why 9×9 + multiple choice? Free play teaches shape and tactics quickly, but beg
 
 ## Tech Stack (portable to Android)
 
-**Frontend — PWA web app, wrapped for Android later:**
-- **Vite + TypeScript + React** (or Svelte — decision open, React has widest hiring/capacitor examples). SPA, file-based routing if needed.
-- **PWA** via `vite-plugin-pwa` — installable, offline shell cached, works on Android Chrome out of the box.
-- **Android port:** [Capacitor](https://capacitorjs.com/) wrapping the same `dist/` — `npx cap add android` → publish to Play Store. No rewrite. Alternative is just shipping the PWA via Trusted Web Activity.
-- **Board rendering:** custom SVG component (9×9 is trivial — ~100 lines). No heavy dep. Keeps control over hint markers, animations, ownership heatmap overlay. Logic lib `goban`/`@sabaki/go-board` optional for legality checks; server is source of truth.
-- **State:** Zustand (tiny) + TanStack Query for server calls.
+**Frontend — PWA wrapped for Android via Capacitor:**
+- **Vite + TypeScript + React** + `vite-plugin-pwa` → installable, same `dist/` in Capacitor WebView
+- **Board UI:** `@sabaki/shudan` 1.8.0 (Preact goban, `signMap`/`paintMap`/`ghostStoneMap` for A–E markers) — reuse, don't rewrite
+- **Rules:** `@sabaki/go-board` 1.4.3 (MIT) for capture/ko/suicide legality; server is truth (`online-go/goban` 8.3.226 is heavier alt with scoring)
+- **SGF:** `@sabaki/sgf` 3.5.0 (MIT) for parse/stringify
+- **State:** Zustand + TanStack Query
 
-**Backend — KataGo analysis server:**
-- Small **Node (or Python) HTTP + WebSocket service** that spawns `katago analysis` engine.
-- Loads two networks: **HumanSL model** (for move suggestions & opponent moves) and **strong model** (for ground-truth evaluation / selecting “bad but tempting” decoys).
-- Horizontally scalable; CPU is fine for 9×9 at low visits. GPU optional for lower latency.
-- Phase 2 option: **KataGo WASM** in-browser for offline play (large download, heavier on mobile — defer).
+**Backend — KataGo analysis server (Node or Python):**
+- Spawns `katago analysis`, loads **HumanSL** + **strong** nets; endpoints `POST /candidates|/genmove|/evaluate`
+- No npm wrapper — speak Analysis JSON directly (`@sabaki/gtp` is GTP-only, skip); WASM offline deferred to M5
+- CPU fine for 9×9 at 50–200 visits; Dockerized, models gitignored
 
 See [`docs/TECH_STACK.md`](docs/TECH_STACK.md) for rationale & alternatives, [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for diagram + API, [`docs/KATAGO_INTEGRATION.md`](docs/KATAGO_INTEGRATION.md) for engine details.
 
@@ -60,12 +59,13 @@ go_game/
 │   ├── LEARNING_DESIGN.md       # move-selection strategies & feedback UX
 │   └── KATAGO_INTEGRATION.md    # KataGo models, GTP/analysis, deployment
 ├── app/                         # frontend PWA (Vite + TS + React)
-│   ├── src/components/Board/    # SVG board + hint markers
-│   ├── src/lib/goban.ts         # client-side legality helper
-│   ├── src/store/               # game state
+│   ├── src/components/Board/    # Shudan wrapper + Marker overlay
+│   ├── src/lib/goban.ts         # wraps @sabaki/go-board (legality)
+│   ├── src/lib/sgf.ts           # wraps @sabaki/sgf
+│   ├── src/store/               # Zustand state
 │   └── public/
 ├── server/                      # KataGo bridge (Node/Python)
-│   ├── src/katago.ts            # spawn + analysis engine protocol
+│   ├── src/katago.ts            # Analysis JSON over stdin/stdout
 │   └── models/                  # (gitignored) .bin.gz networks
 └── sgf/                         # sample SGFs / test fixtures
 ```
