@@ -38,7 +38,7 @@ Dockerfile installs `katago` binary + mounts `models/`. CPU fine for 9×9 ≤200
 
 ## MCTS / Search-ahead (planned / M5)
 
-**No MCTS in mock** — currently `P_h`/`W_s` from single analysis call; real KataGo uses `maxVisits` MCTS with `humanSLRootExploreProbWeightless`. To improve "tempting bad" accuracy, add 1-ply lookahead to mock:
+Real KataGo uses `maxVisits` MCTS. To improve "tempting bad" accuracy, could add 1-ply lookahead:
 
 - After candidate: simulate move `m`, find opponent's best reply `o` (via `strongWinrate` or quick MCTS with `maxVisits=50`), compute `G_after = best(W_s after o) - W_s(m)`. Use `G_after` instead of `G` for "bad" selection — teaches avoiding moves that give opponent key point.
 - Implementation: extend `katagoClient` with `POST /lookahead {board, move, maxVisits}`; server does quick `analysis` of 1-ply continuation. Fallback: client-side `toSignMap` + `isLegal` to simulate basic capture only.

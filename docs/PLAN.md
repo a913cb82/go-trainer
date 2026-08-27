@@ -11,7 +11,7 @@
 
 ```bash
 npm create vite@latest app -- --template react-ts
-cd app && npm i @sabaki/shudan @sabaki/go-board @sabaki/sgf zustand @tanstack/react-query vite-plugin-pwa
+cd app && npm i @sabaki/go-board @sabaki/sgf zustand vite-plugin-pwa
 npm i -D vitest @testing-library/react playwright eslint prettier
 # server (Node):
 mkdir server && cd server && npm init -y && npm i fastify && npm i -D typescript tsx @types/node
@@ -32,7 +32,7 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 - [x] **Frontend framework:** React + Vite
 - [x] **Backend language:** Node (Fastify)
 - [x] **KataGo deployment:** Hosted CPU server first; WASM deferred to M5 (no npm wrapper, speak JSON directly)
-- [x] **Board lib:** `@sabaki/shudan` 1.8.0 + `@sabaki/go-board` 1.4.3 — reuse, don't rewrite (`jgoboard`/`goban` are alts)
+- [x] **Board lib:** custom SVG `GobanView.tsx` + `@sabaki/go-board` 1.4.3 — reuse rules, not board widget
 - [x] **SGF:** `@sabaki/sgf` 3.5.0
 - [ ] **Capacitor vs TWA:** Capacitor for store listing; PWA alone for sideload
 
@@ -42,22 +42,22 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 - [x] `app/` Vite+TS+React, `vite-plugin-pwa` manifest + Workbox, Vitest
 - [x] `lib/goban.ts` → `@sabaki/go-board`, `lib/sgf.ts` → `@sabaki/sgf`
-- [x] `components/Board/` Shudan with ghost/paint markers
+- [x] `components/Board/` custom SVG `GobanView` with faint candidates + points feedback
 - [x] `gameStore` (Zustand) loop, pass×2, undo, new game
 - [x] Rank & n selector, SGF export, `goban.test.ts` passing
 
-## M1 — KataGo Server ✓ (mock, real pending binary)
+## M1 — KataGo Server ✓
 
-- [x] `katago.ts` mock picker with rank thresholds, 5 strategies, shuffle; real `KatagoEngine` stub (spawns when KATAGO_BINARY set)
+- [x] `katago.ts` `KatagoEngine` (spawns `katago analysis`, rank `rank_*` profiles, `humanPolicy` sampling)
 - [x] `GET /ranks|/health`, `POST /candidates|/genmove|/evaluate` (Zod), `komi 7`, `9x9`
-- [x] `katago.test.ts` 6 tests, mock genmove/evaluate, `scripts/download-models.sh` + `config/analysis.cfg` + `Dockerfile` + `docker-compose.yml`
-- [x] `katagoClient.ts` + proxy `/api` → `:3001`, error fallback
+- [x] `scripts/download-models.sh` + `config/analysis.cfg` + `Dockerfile`
+- [x] `katagoClient.ts` + proxy `/api` → `:3001`
 
 **Done when:** `curl POST /candidates` returns 5 shuffled — verified.
 
 ## M2 — Choice UI & Feedback ✓
 
-- [x] A–E shuffled via `ChoiceBar`, `GobanView` ghost/paint maps, feedback ordered by `W_s` (green/yellow/red) + `P_h%`/`Δ`/tag
+- [x] Custom SVG `GobanView`, faint candidate circles, feedback ordered by predicted points (green/yellow/red) + `P_h%`/`pts`/`Δ`/tag
 - [x] `WinrateGraph` sparkline, score area, last winrate
 - [x] SGF export (data URI), import stub, history debug
 
@@ -99,8 +99,8 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 ## Testing
 
-- Unit: `goban` (capture/ko), `sgf` round-trip, candidate picker gaps (Vitest)
-- E2E: Playwright plays full game via `/candidates` mock + real server, asserts feedback ordering
+- Unit: `goban` (capture/ko), `sgf` round-trip, rank thresholds (Vitest)
+- E2E: Playwright plays full game via real server, asserts feedback ordering
 - Manual: play 20 games at 10k and 3d, log `G(picked)`
 
 ## Definition of Ready for v0

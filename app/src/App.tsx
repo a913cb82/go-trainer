@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { GobanView } from './components/Board/GobanView'
 import { RankSelector } from './components/RankSelector'
 import { WinrateGraph } from './components/WinrateGraph'
@@ -12,10 +12,8 @@ export default function App(){
   const [reviewIdx, setReviewIdx] = useState<number|null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string|null>(null)
-  const prevToMove = useRef(s.toMove)
 
   const signMap = boardSignMap(s.board)
-  const displayBoard = s.board
 
   const isPlayerTurn = s.status==='playing' && s.toMove===1 // player is Black
   const needCandidates = isPlayerTurn && !freePlay && !s.candidates && reviewIdx===null
@@ -26,28 +24,19 @@ export default function App(){
     setLoading(true); setErr(null)
     katago.candidates(signMap, 'B', s.rank, s.n, s.strategy, s.history)
       .then(res=> s.setCandidates(res.moves as any))
-      .catch(e=> { setErr(String(e)); // fallback: mock already handled server-side; show empty
-      })
+      .catch(e=> setErr(String(e)))
       .finally(()=> setLoading(false))
-  }, [needCandidates, signMap, s.rank, s.n, s.strategy])
+  }, [needCandidates, s.board, s.rank, s.n, s.strategy])
 
   // when player picks candidate
   async function onPick(c:any){
     const was = s.candidates
     if(!was) return
-    // Apply move
     s.applyMove(c.x, c.y)
-    // evaluate all candidates to show feedback with gaps
-    const boardAfter = boardSignMap(s.board) // note: s.board updated after apply? need to capture before next render; use signMap before move for eval is more accurate
-    // Instead, evaluate using the board before move for each candidate's resulting position?
-    // Simplifier: use returned humanPolicy/strongScore gaps — rank by predicted points
     const best = Math.max(...was.map((x:any)=>x.strongScore ?? 0))
     const evals = was.map((x:any)=>({...x, gap: best - (x.strongScore ?? 0)}))
     s.setEvaluations(evals)
-    const pickedGap = best - (c.strongScore ?? 0)
     s.pushWinrate(c.strongWinrate)
-    // if blunder streak logic: if 3 consecutive pickedGap>0.03, next strategy would be blunder-check (handled server next time)
-    void pickedGap; void boardAfter
     // trigger opponent after delay
     setTimeout(async()=>{
       if(s.status!=='playing') return
@@ -85,16 +74,6 @@ export default function App(){
     }
   }
 
-  // keep evaluations visible one ply then clear on next player turn
-  useEffect(()=>{
-    if(prevToMove.current===-1 && s.toMove===1){
-      // returned to player, clear old evaluations after a moment unless still same position
-      // we clear immediately so new candidates fetch
-      //s.setEvaluations(null) // already cleared on applyMove? Keep feedback until new candidates loaded
-    }
-    prevToMove.current=s.toMove
-  }, [s.toMove])
-
   const last = s.history.length ? s.history[s.history.length-1] : undefined
   const lastPlayerMove = [...s.history].reverse().find(h=> h.color===1 && h.x>=0) as {x:number,y:number}|undefined
   const filteredEvals = (()=>{
@@ -122,11 +101,11 @@ export default function App(){
       }}/></label>
     </div>
 
-    {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err} — running in mock mode if backend down.</div>}
+    {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err}</div>}
     {loading && <div style={{color:'#666'}}>Thinking…</div>}
 
-    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={filteredEvals} lastMove={last && last.x>=0 ? [last.x, last.y] as [number,number] : undefined} feedbackMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} rank={s.rank} onVertexClick={onVertexClick} />
-    {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted faint point (A–E) on the board</div>}
+    <GobanView board={s.board} candidates={freePlay? null : s.candidates} evaluations={filteredEvals} lastMove={last && last.x>=0 ? [last.x, last.y] as [number,number] : undefined} feedbackMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} rank={s.rank} onVertexClick={onVertexClick} />
+    {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted point on the board</div>}
 
     <div style={{marginTop:12, display:'grid', gap:12}}>
       {s.evaluations && <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
@@ -142,9 +121,6 @@ export default function App(){
       </div>
     </div>
 
-    <details style={{marginTop:16}}>
-      <summary>Debug: signMap / history</summary>
-      <pre style={{fontSize:12, overflow:'auto'}}>{JSON.stringify({signMap, history:s.history, candidates:s.candidates}, null, 2)}</pre>
-    </details>
+
   </div>
 }

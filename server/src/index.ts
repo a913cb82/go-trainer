@@ -42,6 +42,15 @@ function moveCoord(info:any){
 }
 function humanPrior(info:any){ return Number(info?.humanPrior ?? info?.prior ?? info?.policy ?? 0) }
 function validInfos(infos:any[]){ return infos.filter(info=>moveCoord(info)!==null) }
+function pointsThresholds(rank: string){
+  // Mirrors app/src/lib/rank.ts thresholds (points, rank-graduated)
+  const order = ['15k','12k','10k','8k','5k','3k','1k','1d','3d'] as const
+  const i = (order as readonly string[]).indexOf(rank)
+  if(i<=1) return {good:1.5, bad:4}
+  if(i<=3) return {good:1.5, bad:3.2}
+  if(i<=5) return {good:1, bad:2.5}
+  return {good:0.8, bad:1.8}
+}
 
 app.get('/health', async()=>({ok:true, mode: engine.mode, ranks: RANKS}))
 app.get('/ranks', async()=>({ranks: RANKS}))
@@ -59,7 +68,7 @@ const candidatesBody = z.object({
 app.post('/candidates', async(req, reply)=>{
   const parsed = candidatesBody.safeParse(req.body)
   if(!parsed.success) return reply.code(400).send({error: parsed.error.flatten()})
-  const {board, rank, n, maxVisits, history} = parsed.data
+  const {board, rank, n, strategy, maxVisits, history} = parsed.data
   const profile = 'rank_' + String(rank)
   try{
     const sign = board as number[][]
@@ -80,11 +89,34 @@ app.post('/candidates', async(req, reply)=>{
     const res = await engine.query(query, 15000) as any
     const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
     const humanInfos = [...infos].sort((a,b)=> humanPrior(b)-humanPrior(a))
-    const bestScore = humanInfos.reduce((m:number, i:any)=> Math.max(m, Number(i.scoreLead ?? i.scoreMean ?? 0)), -Infinity)
+    const scoreInfos = [...infos].sort((a,b)=> Number(b.scoreLead ?? b.scoreMean ?? 0) - Number(a.scoreLead ?? a.scoreMean ?? 0))
+    const bestScore = scoreInfos[0] ? Number(scoreInfos[0].scoreLead ?? scoreInfos[0].scoreMean ?? 0) : 0
+    const th = pointsThresholds(String(rank))
+    let pool: any[] = []
+    if(strategy==='human-only') pool = humanInfos.slice(0, n)
+    else if(strategy==='strong-only') pool = scoreInfos.slice(0, n)
+    else if(strategy==='tesuji'){
+      const best = scoreInfos[0]
+      const bad = humanInfos.filter(s=> s!==best && (bestScore - Number(s.scoreLead ?? s.scoreMean ?? 0)) >= 2).slice(0, 4)
+      pool = best ? [best, ...bad].slice(0, n) : humanInfos.slice(0, n)
+    } else if(strategy==='blunder-check'){
+      const good = humanInfos.filter(s=> (bestScore - Number(s.scoreLead ?? s.scoreMean ?? 0)) <= th.good).slice(0, 4)
+      const bad = humanInfos.filter(s=> (bestScore - Number(s.scoreLead ?? s.scoreMean ?? 0)) >= 5).slice(0, 1)
+      pool = [...good, ...bad].slice(0, n)
+      if(pool.length < n) pool = humanInfos.slice(0, n)
+    } else { // good-vs-tempting
+      const good = humanInfos.filter(s=> (bestScore - Number(s.scoreLead ?? s.scoreMean ?? 0)) <= th.good).slice(0, 3)
+      const bad = humanInfos.filter(s=> (bestScore - Number(s.scoreLead ?? s.scoreMean ?? 0)) >= th.bad).slice(0, 2)
+      pool = [...good, ...bad]
+      if(pool.length < n){
+        const remaining = humanInfos.filter(s=> !pool.includes(s)).slice(0, n - pool.length)
+        pool = [...pool, ...remaining]
+      }
+      pool = pool.slice(0, n)
+    }
     const seen = new Set<string>()
     const mapped: any[] = []
-    for(const info of humanInfos){
-      if(mapped.length>=n) break
+    for(const info of pool){
       const point = moveCoord(info)
       if(!point || point.pass) continue
       const {x,y} = point
@@ -100,7 +132,7 @@ app.post('/candidates', async(req, reply)=>{
         strongWinrate: info.winrate ?? 0.5,
         strongScore: score,
         scoreGap: Math.max(0, Math.round(gap*10)/10),
-        tag: gap <= 1.5 ? 'good' : gap >= 4 ? 'overconcentrated' : 'ok'
+        tag: gap <= th.good ? 'good' : gap >= th.bad ? 'overconcentrated' : 'ok'
       })
     }
     return { moves: mapped, meta: { humanModel: 'b18c384nbt-humanv0', strongModel: 'strong', visits: maxVisits || 150, mode: 'real', profile } }
