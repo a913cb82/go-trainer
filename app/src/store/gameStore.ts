@@ -47,7 +47,7 @@ export const useGame = create<State>((set, get)=>({
   evaluations: null,
   evalsHistory: [],
   showFeedback: true,
-  feedbackScope: 'all' as const,
+  feedbackScope: 'all',
   winrateHistory: [],
   status: 'playing',
   passing: 0,
