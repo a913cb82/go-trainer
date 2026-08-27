@@ -192,9 +192,20 @@ app.post('/evaluate', async(req, reply)=>{
         overrideSettings: { humanSLProfile: profile, ignorePreRootHistory: false }
       }
       const res = await engine.query(query, 15000) as any
-      const ownership = res?.ownership || res?.result?.ownership || Array.from({length:9},()=>Array(9).fill(0.5))
-      const best = (res?.moveInfos || res?.result?.moveInfos || []).reduce((b:any,c:any)=> (c.winrate > (b.winrate||0) ? c : b), {winrate:0.5})
-      return { winrate: best.winrate || 0.5, scoreLead: (best.winrate - 0.5)*14, ownership }
+      const own = res?.ownership || res?.result?.ownership || []
+      // KataGo returns ownership as a flat row-major array of 81 floats; reshape to 9x9.
+      const ownership = Array.isArray(own) && own.length===81
+        ? Array.from({length:9},(_,y)=> own.slice(y*9,(y+1)*9))
+        : Array.from({length:9},()=>Array(9).fill(0))
+      // The evaluated move is the LAST move (at turn pos.moves.length). The value of the
+      // position after it is rootInfo; the move's own winrate/scoreLead are also in moveInfos
+      // if it was searched. Prefer the evaluated moveInfo, fall back to rootInfo's root value.
+      const infos = res?.moveInfos || res?.result?.moveInfos || []
+      const root = res?.rootInfo || res?.result?.rootInfo || {}
+      const byMove = (res?.roots?.[0]?.childInfos || []).find((c:any)=> c.move===evalCoord) || infos.find((c:any)=> c.move===evalCoord)
+      const winrate = byMove?.winrate ?? root.winrate ?? 0.5
+      const scoreLead = byMove?.scoreLead ?? root.scoreLead ?? 0
+      return { winrate: Number(winrate) || 0.5, scoreLead: Number(scoreLead) || 0, ownership }
     } catch (e: any) {
       console.error('Real evaluate error:', e.message)
       const r = mockEvaluate(board as any, move, maxVisits)
