@@ -54,7 +54,7 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           return <circle cx={cx} cy={cy} r={7} fill="none" stroke={v===1?'#fff':'#111'} strokeWidth={2} opacity={0.9} style={{pointerEvents:'none'}}/>
         })()}
         {/* feedback halo for your last move — rank-graduated, stays after enemy moves.
-            Also draw a letter badge on top so the picked move is labeled like the others. */}
+            Shows predicted points + tiny winrate for the picked move. */}
         {feedbackMove && (()=>{
           const [lx,ly] = feedbackMove
           if(signMap[ly]?.[lx]===0) return null
@@ -62,10 +62,13 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           const ev = evaluations?.find(e=> e.x===lx && e.y===ly)
           if(!ev) return null
           const {hex, bg} = gapColor(ev.gap, rank)
+          const pts = ev.strongScore ?? 0
+          const win = Math.round((ev.strongWinrate ?? 0.5)*100)
           return <g style={{pointerEvents:'none'}}>
             <circle cx={cx} cy={cy} r={19} fill="none" stroke={hex} strokeWidth={3.5} opacity={0.95}/>
-            <circle cx={cx} cy={cy} r={11} fill={bg} fillOpacity={0.98} stroke={hex} strokeWidth={1.8}/>
-            <text x={cx} y={cy+4} textAnchor="middle" fontSize={11} fontWeight={800} fill={hex}>{ev.label}</text>
+            <circle cx={cx} cy={cy} r={12} fill={bg} fillOpacity={0.98} stroke={hex} strokeWidth={1.8}/>
+            <text x={cx} y={cy+1} textAnchor="middle" fontSize={8.5} fontWeight={800} fill={hex}>{pts>=0?'+':''}{(pts).toFixed(1)}</text>
+            <text x={cx} y={cy+9} textAnchor="middle" fontSize={6.5} fontWeight={700} fill={hex} opacity={0.85}>{win}%</text>
           </g>
         })()}
         {/* current candidates — always faint, never tinted by old feedback */}
@@ -92,9 +95,12 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           const isOverlap = candMap.has(`${e.x},${e.y}`)
           const ox = isOverlap ? 11 : 0
           const oy = isOverlap ? -11 : 0
+          const pts = e.strongScore ?? 0
+          const win = Math.round((e.strongWinrate ?? 0.5)*100)
           return <g key={`eval-${e.label}`} style={{pointerEvents:'none'}}>
-            <circle cx={cx+ox} cy={cy+oy} r={isOverlap? 8 : 10} fill={bg} fillOpacity={0.96} stroke={hex} strokeWidth={1.8} strokeOpacity={1}/>
-            <text x={cx+ox} y={cy+oy+3.5} textAnchor="middle" fontSize={isOverlap?7:9} fontWeight={800} fill={hex}>{e.label}</text>
+            <circle cx={cx+ox} cy={cy+oy} r={isOverlap? 9 : 12} fill={bg} fillOpacity={0.96} stroke={hex} strokeWidth={1.8} strokeOpacity={1}/>
+            <text x={cx+ox} y={cy+oy+1} textAnchor="middle" fontSize={isOverlap?6.5:8.5} fontWeight={800} fill={hex}>{pts>=0?'+':''}{(pts).toFixed(1)}</text>
+            <text x={cx+ox} y={cy+oy+9} textAnchor="middle" fontSize={isOverlap?5.5:6.5} fontWeight={700} fill={hex} opacity={0.85}>{win}%</text>
           </g>
         })}
         {/* coordinates */}
