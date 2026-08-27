@@ -29,6 +29,18 @@ Parse `moveInfos[].move, winrate, policy, scoreLead, ownership` for `P_h` and `W
 
 Dockerfile installs `katago` binary + mounts `models/`. CPU fine for 9×9 ≤200 visits. Tune `numSearchThreads`, `maxVisits`.
 
+## MCTS / Search-ahead (planned / M5)
+
+**No MCTS in mock** — currently `P_h`/`W_s` from single analysis call; real KataGo uses `maxVisits` MCTS with `humanSLRootExploreProbWeightless`. To improve "tempting bad" accuracy, add 1-ply lookahead to mock:
+
+- After candidate: simulate move `m`, find opponent's best reply `o` (via `strongWinrate` or quick MCTS with `maxVisits=50`), compute `G_after = best(W_s after o) - W_s(m)`. Use `G_after` instead of `G` for "bad" selection — teaches avoiding moves that give opponent key point.
+- Implementation: extend `katagoClient` with `POST /lookahead {board, move, maxVisits}`; server does quick `analysis` of 1-ply continuation. Fallback: client-side `toSignMap` + `isLegal` to simulate basic capture only.
+
+Real engine (`mode=real`) gets this for free via KataGo's MCTS (`maxVisits=200+`).
+
 ## TODO
 
-Verify exact HumanSL rank conditioning flag and `komi` 7 vs 7.5 effect on 9×9 human policy.
+- [x] Binary + libzip/libssl fix done; `mode=real` confirmed.
+- [x] Real engine query protocol (JSON lines) working; `humanSLProfile` injected.
+- [ ] MCTS stub / 1-ply lookahead (optional, improves tempting-bad)
+- [ ] Verify `komi` 7.5 vs 7 effect; test 13×13 toggle; WASM deferred.
