@@ -1,0 +1,21 @@
+{
+  "name": "server",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.6.2",
+    "@fastify/cors": "^11.1.0",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "tsx": "^4.21.0",
+    "@types/node": "^24.0.0",
+    "vitest": "^4.1.11"
+  }
+}

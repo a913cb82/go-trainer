@@ -1,0 +1,8 @@
+node_modules/
+dist/
+server/dist/
+app/dist/
+server/models/*.bin.gz
+server/models/*.bin
+.env
+.subagents/
