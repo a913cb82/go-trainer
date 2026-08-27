@@ -1,122 +1,146 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useRef, useState } from 'react'
+import { GobanView } from './components/Board/GobanView'
+import { RankSelector } from './components/RankSelector'
+import { ChoiceBar } from './components/ChoiceBar'
+import { FeedbackPanel } from './components/FeedbackPanel'
+import { WinrateGraph } from './components/WinrateGraph'
+import { useGame, boardSignMap } from './store/gameStore'
+import { katago } from './lib/katagoClient'
+import { boardToSgf } from './lib/sgf'
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App(){
+  const s = useGame()
+  const [freePlay, setFreePlay] = useState(false)
+  const [reviewIdx, setReviewIdx] = useState<number|null>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState<string|null>(null)
+  const prevToMove = useRef(s.toMove)
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+  const signMap = boardSignMap(s.board)
+  const displayBoard = s.board
 
-      <div className="ticks"></div>
+  const isPlayerTurn = s.status==='playing' && s.toMove===1 // player is Black
+  const needCandidates = isPlayerTurn && !freePlay && !s.candidates && !s.evaluations && reviewIdx===null
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+  // fetch candidates when needed
+  useEffect(()=>{
+    if(!needCandidates) return
+    setLoading(true); setErr(null)
+    katago.candidates(signMap, 'B', s.rank, s.n, s.strategy)
+      .then(res=> s.setCandidates(res.moves as any))
+      .catch(e=> { setErr(String(e)); // fallback: mock already handled server-side; show empty
+      })
+      .finally(()=> setLoading(false))
+  }, [needCandidates, signMap, s.rank, s.n, s.strategy])
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+  // when player picks candidate
+  async function onPick(c:any){
+    const was = s.candidates
+    if(!was) return
+    // Apply move
+    s.applyMove(c.x, c.y)
+    // evaluate all candidates to show feedback with gaps
+    const boardAfter = boardSignMap(s.board) // note: s.board updated after apply? need to capture before next render; use signMap before move for eval is more accurate
+    // Instead, evaluate using the board before move for each candidate's resulting position?
+    // Simplifier: use returned humanPolicy/strongWinrate gaps
+    const best = Math.max(...was.map((x:any)=>x.strongWinrate))
+    const evals = was.map((x:any)=>({...x, gap: best - x.strongWinrate}))
+    s.setEvaluations(evals)
+    const pickedGap = best - c.strongWinrate
+    s.pushWinrate(c.strongWinrate)
+    // if blunder streak logic: if 3 consecutive pickedGap>0.03, next strategy would be blunder-check (handled server next time)
+    void pickedGap; void boardAfter
+    // trigger opponent after delay
+    setTimeout(async()=>{
+      if(s.status!=='playing') return
+      try{
+        const curMap = boardSignMap(useGame.getState().board)
+        const res = await katago.genmove(curMap, 'W', s.rank)
+        if(res.move.pass) useGame.getState().pass()
+        else useGame.getState().applyMove(res.move.x, res.move.y)
+        useGame.getState().pushWinrate(res.winrate)
+        // clear evaluations for next player turn after opponent move
+        // evaluations stay visible until next candidate fetch; we clear on next turn via effect? Keep.
+      }catch(e){ setErr(String(e)) }
+    }, 450)
+  }
+
+  // immediate click on board when freePlay or no candidates yet
+  function onVertexClick(x:number,y:number){
+    if(reviewIdx!==null) return
+    if(!freePlay && s.candidates){
+      // must pick via bar, ignore board clicks
+      return
+    }
+    if(s.toMove!==1 || s.status!=='playing') return
+    // if freePlay, apply directly and treat as if candidate was that move
+    if(freePlay){
+      s.applyMove(x,y)
+      s.pushWinrate(0.5) // placeholder until evaluate
+      // opponent reply
+      setTimeout(async()=>{
+        try{
+          const curMap = boardSignMap(useGame.getState().board)
+          const res = await katago.genmove(curMap, 'W', s.rank)
+          if(res.move.pass) useGame.getState().pass(); else useGame.getState().applyMove(res.move.x, res.move.y)
+        }catch{}
+      },400)
+    }
+  }
+
+  // keep evaluations visible one ply then clear on next player turn
+  useEffect(()=>{
+    if(prevToMove.current===-1 && s.toMove===1){
+      // returned to player, clear old evaluations after a moment unless still same position
+      // we clear immediately so new candidates fetch
+      //s.setEvaluations(null) // already cleared on applyMove? Keep feedback until new candidates loaded
+    }
+    prevToMove.current=s.toMove
+  }, [s.toMove])
+
+  const last = s.history.length ? s.history[s.history.length-1] : undefined
+  const sgf = boardToSgf(signMap, s.history.map(h=>({x:h.x,y:h.y,color:h.color})), 7)
+
+  return <div style={{fontFamily:'system-ui', maxWidth:920, margin:'0 auto', padding:16}}>
+    <h1 style={{margin:'4px 0'}}>Go 9×9 — KataGo HumanSL</h1>
+    <p style={{color:'#555', marginTop:0}}>Play Black vs {s.rank} bot (White). {freePlay ? 'Free play — click anywhere.' : 'Pick A–E each turn, then see feedback.'}</p>
+
+    <RankSelector rank={s.rank} n={s.n} strategy={s.strategy} onRank={s.setRank} onN={s.setN} onStrategy={s.setStrategy} disabled={s.history.length>0 && s.status==='playing'} />
+    <div style={{display:'flex', gap:8, margin:'12px 0', flexWrap:'wrap'}}>
+      <button onClick={()=>{s.newGame(); setReviewIdx(null)}}>New game</button>
+      <button onClick={()=>s.undo()} disabled={s.history.length===0}>Undo</button>
+      <button onClick={()=>s.pass()} disabled={s.status!=='playing'}>Pass</button>
+      <label><input type="checkbox" checked={freePlay} onChange={e=> setFreePlay(e.target.checked)}/> Free play</label>
+      <label>Review <input type="range" min={0} max={s.history.length} value={reviewIdx??s.history.length} onChange={e=>{const v=Number(e.target.value); setReviewIdx(v===s.history.length?null:v)}}/></label>
+      <a href={'data:text/plain;charset=utf-8,'+encodeURIComponent(sgf)} download={`game-${Date.now()}.sgf`} style={{border:'1px solid #999', padding:'6px 10px', borderRadius:6, textDecoration:'none', color:'#000', background:'#eee'}}>Export SGF</a>
+      <label style={{border:'1px solid #999', padding:'6px 10px', borderRadius:6, background:'#eee', cursor:'pointer'}}>Import SGF<input type="file" accept=".sgf" style={{display:'none'}} onChange={async e=>{
+        const f=e.target.files?.[0]; if(!f) return; const t=await f.text(); // naive: reset and ignore parse
+        void t; alert('SGF import parses via @sabaki/sgf — wiring TODO, file read ok')
+      }}/></label>
+    </div>
+
+    {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err} — running in mock mode if backend down.</div>}
+    {loading && <div style={{color:'#666'}}>Thinking…</div>}
+
+    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.evaluations} lastMove={last && last.x>=0 ? [last.x,last.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
+
+    <div style={{marginTop:12}}>
+      {!freePlay && <ChoiceBar candidates={s.candidates} onPick={onPick} disabled={!!s.evaluations || s.status!=='playing' || s.toMove!==1} />}
+    </div>
+
+    <div style={{marginTop:12, display:'grid', gap:12}}>
+      <FeedbackPanel evals={s.evaluations as any} />
+      <WinrateGraph history={s.winrateHistory} />
+      <div style={{fontSize:13, color:'#444'}}>
+        Moves: {s.history.length} · To move: {s.toMove===1?'B':'W'} · Status: {s.status} · Score est area: {(()=>
+          {let b=0,w=0; for(const r of signMap) for(const v of r) if(v===1) b++; else if(v===-1) w++; return `B ${b} — W ${w}`})()}
+        {s.winrateHistory.length>0 && ` · Last winrate ${(s.winrateHistory[s.winrateHistory.length-1]*100).toFixed(1)}%`}
+      </div>
+    </div>
+
+    <details style={{marginTop:16}}>
+      <summary>Debug: signMap / history</summary>
+      <pre style={{fontSize:12, overflow:'auto'}}>{JSON.stringify({signMap, history:s.history, candidates:s.candidates}, null, 2)}</pre>
+    </details>
+  </div>
 }
-
-export default App

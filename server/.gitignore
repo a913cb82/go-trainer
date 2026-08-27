@@ -1,0 +1,4 @@
+models/*.bin.gz
+models/*.bin
+dist/
+node_modules/
