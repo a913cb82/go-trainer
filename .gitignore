@@ -8,3 +8,4 @@ server/models/*.bin
 .subagents/
 *.deb
 server/analysis_logs/
+analysis_logs/
