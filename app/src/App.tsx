@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { GobanView } from './components/Board/GobanView'
 import { RankSelector } from './components/RankSelector'
-import { ChoiceBar } from './components/ChoiceBar'
 import { FeedbackPanel } from './components/FeedbackPanel'
 import { WinrateGraph } from './components/WinrateGraph'
 import { useGame, boardSignMap } from './store/gameStore'
@@ -65,19 +64,19 @@ export default function App(){
     }, 450)
   }
 
-  // immediate click on board when freePlay or no candidates yet
+  // board click: pick candidate directly (no buttons)
   function onVertexClick(x:number,y:number){
     if(reviewIdx!==null) return
+    if(s.status!=='playing' || s.toMove!==1) return
+    if(s.evaluations) return // feedback showing — wait for opponent
     if(!freePlay && s.candidates){
-      // must pick via bar, ignore board clicks
+      const cand = s.candidates.find(c=> c.x===x && c.y===y)
+      if(cand) onPick(cand)
       return
     }
-    if(s.toMove!==1 || s.status!=='playing') return
-    // if freePlay, apply directly and treat as if candidate was that move
     if(freePlay){
       s.applyMove(x,y)
-      s.pushWinrate(0.5) // placeholder until evaluate
-      // opponent reply
+      s.pushWinrate(0.5)
       setTimeout(async()=>{
         try{
           const curMap = boardSignMap(useGame.getState().board)
@@ -123,10 +122,7 @@ export default function App(){
     {loading && <div style={{color:'#666'}}>Thinking…</div>}
 
     <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.evaluations} lastMove={last && last.x>=0 ? [last.x,last.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
-
-    <div style={{marginTop:12}}>
-      {!freePlay && <ChoiceBar candidates={s.candidates} onPick={onPick} disabled={!!s.evaluations || s.status!=='playing' || s.toMove!==1} />}
-    </div>
+    {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted point (A–E) on the board to play</div>}
 
     <div style={{marginTop:12, display:'grid', gap:12}}>
       <FeedbackPanel evals={s.evaluations as any} />
