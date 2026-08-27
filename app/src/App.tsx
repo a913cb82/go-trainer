@@ -19,7 +19,7 @@ export default function App(){
   const displayBoard = s.board
 
   const isPlayerTurn = s.status==='playing' && s.toMove===1 // player is Black
-  const needCandidates = isPlayerTurn && !freePlay && !s.candidates && !s.evaluations && reviewIdx===null
+  const needCandidates = isPlayerTurn && !freePlay && !s.candidates && reviewIdx===null
 
   // fetch candidates when needed
   useEffect(()=>{
@@ -68,7 +68,6 @@ export default function App(){
   function onVertexClick(x:number,y:number){
     if(reviewIdx!==null) return
     if(s.status!=='playing' || s.toMove!==1) return
-    if(s.evaluations) return // feedback showing — wait for opponent
     if(!freePlay && s.candidates){
       const cand = s.candidates.find(c=> c.x===x && c.y===y)
       if(cand) onPick(cand)
@@ -121,11 +120,15 @@ export default function App(){
     {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err} — running in mock mode if backend down.</div>}
     {loading && <div style={{color:'#666'}}>Thinking…</div>}
 
-    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.evaluations} lastMove={last && last.x>=0 ? [last.x,last.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
-    {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted point (A–E) on the board to play</div>}
+    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.showFeedback ? s.evaluations : null} lastMove={last && last.x>=0 ? [last.x,last.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
+    {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted faint point (A–E) on the board</div>}
 
     <div style={{marginTop:12, display:'grid', gap:12}}>
-      <FeedbackPanel evals={s.evaluations as any} />
+      {s.evaluations && <div style={{display:'flex', gap:8, alignItems:'center'}}>
+        <label style={{fontSize:13}}><input type="checkbox" checked={s.showFeedback} onChange={e=> s.setShowFeedback(e.target.checked)} /> Show feedback</label>
+        {s.evaluations && <button onClick={()=> s.clearEvaluations()} style={{fontSize:12, padding:'4px 8px'}}>Clear</button>}
+      </div>}
+      {s.showFeedback && <FeedbackPanel evals={s.evaluations as any} />}
       <WinrateGraph history={s.winrateHistory} />
       <div style={{fontSize:13, color:'#444'}}>
         Moves: {s.history.length} · To move: {s.toMove===1?'B':'W'} · Status: {s.status} · Score est area: {(()=>

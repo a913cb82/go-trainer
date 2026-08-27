@@ -46,20 +46,22 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
             {isLast && <circle cx={cx} cy={cy} r={6} fill="none" stroke={v===1?'#fff':'#111'} strokeWidth={2} opacity={0.9}/>}
           </g>
         }))}
-        {/* candidate ghost markers A–E */}
+        {/* candidate ghost markers A–E — faint until feedback */}
         {candidates && candidates.map(c=>{
           const cx = PAD + c.x*CELL, cy= PAD + c.y*CELL
           const gap = evalMap.get(`${c.x},${c.y}`)
-          // color by evaluation if available
-          let bg='#fff4c2', border='#7a5a1a'
+          let bg='#fff7cc', border='#7a5a1a'
+          let fillOp = 0.32, strokeOp = 0.45, textOp = 0.75
           if(gap!==undefined){
-            if(gap>0.04){ bg='#ffcccc'; border='#8b0000' }
-            else if(gap>0.02){ bg='#fff0a0'; border='#7a5a1a' }
-            else { bg='#c8f0c8'; border='#1a5a1a' }
+            // feedback: slightly stronger but still muted
+            if(gap>0.04){ bg='#ffcccc'; border='#8b0000'; fillOp=0.55; strokeOp=0.75 }
+            else if(gap>0.02){ bg='#fff0a0'; border='#7a5a1a'; fillOp=0.45; strokeOp=0.65 }
+            else { bg='#d6f0d6'; border='#2a5a1a'; fillOp=0.45; strokeOp=0.65 }
+            textOp=0.9
           }
           return <g key={`cand-${c.label}`} style={{cursor:'pointer'}} onClick={()=>onVertexClick(c.x,c.y)}>
-            <circle cx={cx} cy={cy} r={16} fill={bg} stroke={border} strokeWidth={2} opacity={0.95}/>
-            <text x={cx} y={cy+5} textAnchor="middle" fontSize={14} fontWeight={700} fill={border}>{c.label}</text>
+            <circle cx={cx} cy={cy} r={15} fill={bg} fillOpacity={fillOp} stroke={border} strokeOpacity={strokeOp} strokeWidth={1.4} strokeDasharray={gap===undefined? '4 3' : undefined}/>
+            <text x={cx} y={cy+4} textAnchor="middle" fontSize={12} fontWeight={700} fill={border} opacity={textOp}>{c.label}</text>
           </g>
         })}
         {/* click targets */}

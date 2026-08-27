@@ -15,17 +15,20 @@ type State = {
   strategy: Strategy
   candidates: Candidate[]|null
   evaluations: (Candidate & {gap:number})[]|null
+  showFeedback: boolean
   winrateHistory: number[]
   status: 'playing'|'scoring'|'finished'
   passing: number
   setRank: (r:Rank)=>void
   setN: (n:number)=>void
   setStrategy: (s:Strategy)=>void
+  setShowFeedback: (v:boolean)=>void
   newGame: ()=>void
   applyMove: (x:number,y:number)=>void
   pass: ()=>void
   setCandidates: (c:Candidate[]|null)=>void
   setEvaluations: (e:(Candidate & {gap:number})[]|null)=>void
+  clearEvaluations: ()=>void
   pushWinrate: (w:number)=>void
   undo: ()=>void
 }
@@ -39,15 +42,18 @@ export const useGame = create<State>((set, get)=>({
   strategy: 'good-vs-tempting',
   candidates: null,
   evaluations: null,
+  showFeedback: true,
   winrateHistory: [],
   status: 'playing',
   passing: 0,
   setRank: rank=> set({rank}),
   setN: n=> set({n}),
   setStrategy: strategy=> set({strategy}),
+  setShowFeedback: showFeedback=> set({showFeedback}),
   newGame: ()=> set({board: emptyBoard(), history:[], toMove:1, candidates:null, evaluations:null, winrateHistory:[], status:'playing', passing:0}),
   setCandidates: candidates=> set({candidates}),
   setEvaluations: evaluations=> set({evaluations}),
+  clearEvaluations: ()=> set({evaluations:null}),
   pushWinrate: w=> set(s=>({winrateHistory:[...s.winrateHistory, w]})),
   applyMove: (x,y)=>{
     const s=get()
@@ -56,13 +62,14 @@ export const useGame = create<State>((set, get)=>({
     const next = (s.board as any).makeMove(col, [x,y]) as Board
     if((next as any).get([x,y])!==col) return
     const rec:MoveRec={x,y,color:s.toMove}
-    set({board:next, history:[...s.history, rec], toMove: s.toMove===-1?1:-1, passing:0, candidates:null, evaluations:null})
+    // keep evaluations (so feedback stays after enemy move); only clear candidates
+    set({board:next, history:[...s.history, rec], toMove: s.toMove===-1?1:-1, passing:0, candidates:null})
   },
   pass: ()=>{
     const s=get()
     const p=s.passing+1
     if(p>=2) set({status:'finished', passing:p})
-    else set({passing:p, toMove: s.toMove===-1?1:-1, candidates:null, evaluations:null, history:[...s.history, {x:-1,y:-1,color:s.toMove}]})
+    else set({passing:p, toMove: s.toMove===-1?1:-1, candidates:null, history:[...s.history, {x:-1,y:-1,color:s.toMove}]})
   },
   undo: ()=>{
     const s=get()
@@ -70,7 +77,7 @@ export const useGame = create<State>((set, get)=>({
     let b=emptyBoard()
     const h=s.history.slice(0,-1)
     for(const m of h) if(m.x>=0) b=(b as any).makeMove(m.color as unknown as Sign, [m.x,m.y]) as Board
-    set({board:b, history:h, toMove: s.toMove===-1?1:-1, candidates:null, evaluations:null, status:'playing', passing:0, winrateHistory: s.winrateHistory.slice(0,-1)})
+    set({board:b, history:h, toMove: s.toMove===-1?1:-1, candidates:null, status:'playing', passing:0, winrateHistory: s.winrateHistory.slice(0,-1)})
   },
 }))
 
