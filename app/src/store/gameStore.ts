@@ -15,6 +15,7 @@ type State = {
   strategy: Strategy
   candidates: Candidate[]|null
   evaluations: (Candidate & {gap:number})[]|null
+  evalsHistory: ((Candidate & {gap:number})[]|null)[]
   showFeedback: boolean
   winrateHistory: number[]
   status: 'playing'|'scoring'|'finished'
@@ -42,6 +43,7 @@ export const useGame = create<State>((set, get)=>({
   strategy: 'good-vs-tempting',
   candidates: null,
   evaluations: null,
+  evalsHistory: [],
   showFeedback: true,
   winrateHistory: [],
   status: 'playing',
@@ -50,10 +52,10 @@ export const useGame = create<State>((set, get)=>({
   setN: n=> set({n}),
   setStrategy: strategy=> set({strategy}),
   setShowFeedback: showFeedback=> set({showFeedback}),
-  newGame: ()=> set({board: emptyBoard(), history:[], toMove:1, candidates:null, evaluations:null, winrateHistory:[], status:'playing', passing:0}),
+  newGame: ()=> set({board: emptyBoard(), history:[], toMove:1, candidates:null, evaluations:null, evalsHistory:[], winrateHistory:[], status:'playing', passing:0}),
   setCandidates: candidates=> set({candidates}),
-  setEvaluations: evaluations=> set({evaluations}),
-  clearEvaluations: ()=> set({evaluations:null}),
+  setEvaluations: evaluations=> set(s=> ({evaluations, evalsHistory: [...s.evalsHistory, evaluations]})),
+  clearEvaluations: ()=> set(s=> ({evaluations:null, evalsHistory: s.evalsHistory.slice(0,-1)})),
   pushWinrate: w=> set(s=>({winrateHistory:[...s.winrateHistory, w]})),
   applyMove: (x,y)=>{
     const s=get()
@@ -74,10 +76,16 @@ export const useGame = create<State>((set, get)=>({
   undo: ()=>{
     const s=get()
     if(s.history.length===0) return
+    const lastBlackIdx = [...s.history].map((h,i)=> ({h,i})).reverse().find(({h})=> h.color===1 && h.x>=0)?.i
+    if(lastBlackIdx===undefined) return
+    const undone = s.history.length - lastBlackIdx
+    const h = s.history.slice(0, lastBlackIdx)
     let b=emptyBoard()
-    const h=s.history.slice(0,-1)
     for(const m of h) if(m.x>=0) b=(b as any).makeMove(m.color as unknown as Sign, [m.x,m.y]) as Board
-    set({board:b, history:h, toMove: s.toMove===-1?1:-1, candidates:null, status:'playing', passing:0, winrateHistory: s.winrateHistory.slice(0,-1)})
+    // restore previous feedback (step back through evalsHistory)
+    const newEvalsHistory = s.evalsHistory.slice(0, -1)
+    const prevEvals = newEvalsHistory.length ? newEvalsHistory[newEvalsHistory.length-1] : null
+    set({board:b, history:h, toMove: 1, candidates:null, evaluations: prevEvals, evalsHistory: newEvalsHistory, status:'playing', passing:0, winrateHistory: s.winrateHistory.slice(0, -undone)})
   },
 }))
 
