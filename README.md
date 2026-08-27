@@ -16,13 +16,15 @@ sudo apt install cuda-toolkit-12-1 libcudnn8
 
 cd app && npm i
 cd ../server && npm i
-./server/scripts/download-models.sh
+cd .. && ./server/scripts/download-models.sh
 ```
 
-Run:
+Run (two terminals):
 
 ```bash
+# terminal 1
 cd server && KATAGO_MODE=real npm run dev  # :3001
+# terminal 2
 cd app && npm run dev                       # :5173 proxies /api → :3001
 curl http://localhost:3001/health
 ```
