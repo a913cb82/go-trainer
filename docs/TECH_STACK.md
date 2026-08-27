@@ -29,7 +29,7 @@ import * as sgf from '@sabaki/sgf'; sgf.parse(str)
 
 ## KataGo Delivery
 
-- **Server first (M1).** WASM (`@multi-game-engines/adapter-katago` etc) → M5, ~95MB, deferred.
+- **Server first (M1).** **Android: Capacitor Native Eigen `arm64-v8a` on-device (M4, chosen).** WASM deferred to M5 (alternative, no native plugin).
 
 ## Tooling
 

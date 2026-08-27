@@ -34,7 +34,7 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 - [x] **KataGo deployment:** Hosted CPU server first; WASM deferred to M5 (no npm wrapper, speak JSON directly)
 - [x] **Board lib:** custom SVG `GobanView.tsx` + `@sabaki/go-board` 1.4.3 — reuse rules, not board widget
 - [x] **SGF:** `@sabaki/sgf` 3.5.0
-- [ ] **Capacitor vs TWA:** Capacitor for store listing; PWA alone for sideload
+- [x] **Capacitor vs TWA:** Capacitor Native — chosen for on-device KataGo (Eigen `arm64-v8a`); PWA alone needs remote server
 
 ---
 
@@ -70,17 +70,17 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 - [x] Winrate history tracked; blunder-streak hook ready
 - [ ] TODO: ownership heatmap overlay, atari haptics, spaced-repetition store (next iteration)
 
-## M4 — Android Portability (1–2 days)
+## M4 — Android (Capacitor Native, on-device) — chosen (1)
 
-- [ ] PWA audit: icons 512×512, `display:standalone`, Workbox shell, Lighthouse ≥95
-- [ ] Capacitor: `cap init/add/sync`, test emulator/device; touch: no scroll/zoom on board, haptics, safe-area
-- [ ] Store: screenshots, Play Console, version `android/app/build.gradle`; TWA alt documented
+- [ ] Native KataGo: NDK `arm64-v8a` Eigen build, `katago` + `b18c384`/`strong` in `filesDir`, `ProcessBuilder` plugin (same JSON protocol)
+- [ ] PWA + Capacitor: `cap init/add/sync`, `cap open android`, PWA audit (icons 512, `standalone`, Workbox), touch/haptics/safe-area, first-launch model download
+- [ ] Store: signed AAB → Play Console
 
-**Done when:** `npm run build && npx cap open android` → installable AAB, offline shell works.
+**Done when:** `npx cap open android` → on-device `mode=real` (no remote server), installable AAB.
 
 ## M5 — Stretch
 
-- [ ] KataGo WASM offline (e.g. `katago-wasm` build, feature-flagged, lazy-loaded network)
+- [ ] KataGo WASM alternative (deferred — Native chosen; `katago-wasm` + `SharedArrayBuffer` threading, no native plugin)
 - [ ] Puzzle mode: generate puzzles from player's blunders (store worst 2% moves, drill them)
 - [ ] Accounts & sync: Supabase/Firebase for game history
 - [ ] 13×13 / 19×19 toggle

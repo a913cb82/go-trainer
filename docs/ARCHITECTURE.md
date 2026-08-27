@@ -1,16 +1,16 @@
 # Architecture
 
 ```
-Browser PWA (app/) --HTTPS--> Server (server/)
+Browser PWA (app/) --HTTPS--> Server (server/)            # PC/dev: remote katago
   Vite/React/SVG  POST /candidates   Node -> katago analysis
   Zustand         POST /genmove       ├─ HumanSL model
   Workbox cache   POST /evaluate     └─ Strong model
-        |
-        v (Capacitor WebView)
-  Android wrapper  (same dist/)
+
+Android (Capacitor): WebView --bridge--> Native plugin -> katago (NDK Eigen arm64, on-device)
+  same dist/ + filesDir models (first-launch download)
 ```
 
-Offline: local `@sabaki/go-board` handles legality; candidate/genmove queue until reconnect.
+Offline: `@sabaki/go-board` handles legality; on Android the `server/` runs on-device via plugin (no remote).
 
 ## Frontend `app/`
 
@@ -32,7 +32,7 @@ server/src/
 models/.gitignore, Dockerfile
 ```
 
-One long-lived `katago analysis` per model, multiplexed over stdin/stdout JSON lines, cached by board hash. No npm wrapper — direct JSON (skip `@sabaki/gtp`).
+One long-lived `katago analysis` per model, multiplexed over stdin/stdout JSON lines (Node on PC, `ProcessBuilder` via Capacitor plugin on Android). No npm wrapper — direct JSON (skip `@sabaki/gtp`).
 
 ## API
 

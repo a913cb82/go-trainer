@@ -34,7 +34,8 @@ For rank imitation, KataGo recommends setting `humanSLProfile`, preserving histo
 
 ## Deployment
 
-Dockerfile installs `katago` binary + mounts `models/`. CPU fine for 9×9 ≤200 visits. Tune `numSearchThreads`, `maxVisits`.
+- **PC/server:** `katago` binary + `models/` via `scripts/download-models.sh`; `server/libs/` for `libssl1.1`/`libzip5`. CPU fine for 9×9 ≤200 visits.
+- **Android (chosen):** NDK `arm64-v8a` Eigen build, `katago` + models in `filesDir`, spawned via Capacitor plugin (`ProcessBuilder`). No CUDA on device; Eigen is enough for 9×9/400 visits.
 
 ## MCTS / Search-ahead (planned / M5)
 
