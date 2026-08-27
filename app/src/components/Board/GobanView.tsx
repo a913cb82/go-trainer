@@ -14,10 +14,11 @@ function starPoints(): [number,number][] {
 
 export function GobanView({board, candidates, evaluations, lastMove, onVertexClick}:{board:Board, candidates:Candidate[]|null, evaluations:(Candidate & {gap:number})[]|null, lastMove?:[number,number], onVertexClick:(x:number,y:number)=>void}){
   const signMap = toSignMap(board)
-  const evalMap = new Map<string, number>()
-  if(evaluations) for(const e of evaluations) evalMap.set(`${e.x},${e.y}`, e.gap)
   const candMap = new Map<string, Candidate>()
   if(candidates) for(const c of candidates) candMap.set(`${c.x},${c.y}`, c)
+  // map evaluations for quick lookup — these are for PREVIOUS turn (feedback), not current candidates
+  const evalMap = new Map<string, Candidate & {gap:number}>()
+  if(evaluations) for(const e of evaluations) evalMap.set(`${e.x},${e.y}`, e)
 
   const stars = starPoints()
 
@@ -36,32 +37,41 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
         })}
         {/* star points */}
         {stars.map(([x,y])=> <circle key={`${x}-${y}`} cx={PAD+x*CELL} cy={PAD+y*CELL} r={4} fill="#3e2b15"/>)}
-        {/* stones */}
+        {/* stones — halo for last move colored by feedback gap */}
         {signMap.flatMap((row,y)=> row.map((v,x)=>{
           if(v===0) return null
           const cx = PAD + x*CELL, cy= PAD + y*CELL
           const isLast = lastMove && lastMove[0]===x && lastMove[1]===y
+          const lastGap = isLast && evaluations ? evaluations.find(e=> e.x===x && e.y===y)?.gap : undefined
+          const haloCol = lastGap===undefined ? (v===1?'#fff':'#111') : lastGap>0.04 ? '#c0392b' : lastGap>0.02 ? '#b7791f' : '#27864a'
+          const haloW = lastGap===undefined ? 2 : 3
           return <g key={`${x}-${y}`}>
             <circle cx={cx} cy={cy} r={16} fill={v===1?'#111':'#fdf8ec'} stroke={v===1?'#000':'#8a7040'} strokeWidth={0.8}/>
-            {isLast && <circle cx={cx} cy={cy} r={6} fill="none" stroke={v===1?'#fff':'#111'} strokeWidth={2} opacity={0.9}/>}
+            {isLast && <circle cx={cx} cy={cy} r={7} fill="none" stroke={haloCol} strokeWidth={haloW} opacity={0.95}/>}
           </g>
         }))}
-        {/* candidate ghost markers A–E — faint until feedback */}
+        {/* current candidates — always faint, never tinted by old feedback */}
         {candidates && candidates.map(c=>{
           const cx = PAD + c.x*CELL, cy= PAD + c.y*CELL
-          const gap = evalMap.get(`${c.x},${c.y}`)
-          let bg='#fff7cc', border='#7a5a1a'
-          let fillOp = 0.32, strokeOp = 0.45, textOp = 0.75
-          if(gap!==undefined){
-            // feedback: slightly stronger but still muted
-            if(gap>0.04){ bg='#ffcccc'; border='#8b0000'; fillOp=0.55; strokeOp=0.75 }
-            else if(gap>0.02){ bg='#fff0a0'; border='#7a5a1a'; fillOp=0.45; strokeOp=0.65 }
-            else { bg='#d6f0d6'; border='#2a5a1a'; fillOp=0.45; strokeOp=0.65 }
-            textOp=0.9
-          }
           return <g key={`cand-${c.label}`} style={{cursor:'pointer'}} onClick={()=>onVertexClick(c.x,c.y)}>
-            <circle cx={cx} cy={cy} r={15} fill={bg} fillOpacity={fillOp} stroke={border} strokeOpacity={strokeOp} strokeWidth={1.4} strokeDasharray={gap===undefined? '4 3' : undefined}/>
-            <text x={cx} y={cy+4} textAnchor="middle" fontSize={12} fontWeight={700} fill={border} opacity={textOp}>{c.label}</text>
+            <circle cx={cx} cy={cy} r={15} fill="#fff7cc" fillOpacity={0.32} stroke="#7a5a1a" strokeOpacity={0.45} strokeWidth={1.4} strokeDasharray="4 3"/>
+            <text x={cx} y={cy+4} textAnchor="middle" fontSize={12} fontWeight={700} fill="#7a5a1a" opacity={0.75}>{c.label}</text>
+          </g>
+        })}
+        {/* feedback for PREVIOUS turn — show alternative candidates as small muted dots (not current options) */}
+        {evaluations && evaluations.map(e=>{
+          // don't duplicate the stone just played (halo already shows it)
+          if(lastMove && e.x===lastMove[0] && e.y===lastMove[1]) return null
+          // if this position is now a current candidate, skip to avoid double-marking (current faint takes precedence)
+          if(candMap.has(`${e.x},${e.y}`)) return null
+          // only show if that point is still empty (no stone)
+          if(signMap[e.y]?.[e.x]!==0) return null
+          const cx = PAD + e.x*CELL, cy= PAD + e.y*CELL
+          const col = e.gap>0.04 ? '#c0392b' : e.gap>0.02 ? '#b7791f' : '#27864a'
+          const bg = e.gap>0.04 ? '#ffcccc' : e.gap>0.02 ? '#fff0a0' : '#d6f0d6'
+          return <g key={`eval-${e.label}`} opacity={0.55}>
+            <circle cx={cx} cy={cy} r={9} fill={bg} stroke={col} strokeWidth={1.2} />
+            <text x={cx} y={cy+3} textAnchor="middle" fontSize={8} fontWeight={700} fill={col}>{e.label}</text>
           </g>
         })}
         {/* click targets */}
