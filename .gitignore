@@ -6,3 +6,5 @@ server/models/*.bin.gz
 server/models/*.bin
 .env
 .subagents/
+*.deb
+server/analysis_logs/
