@@ -96,7 +96,7 @@ export default function App(){
     prevToMove.current=s.toMove
   }, [s.toMove])
 
-  const last = s.history.length ? s.history[s.history.length-1] : undefined
+  const lastPlayerMove = [...s.history].reverse().find(h=> h.color===1 && h.x>=0) as {x:number,y:number}|undefined
   const sgf = boardToSgf(signMap, s.history.map(h=>({x:h.x,y:h.y,color:h.color})), 7)
 
   return <div style={{fontFamily:'system-ui', maxWidth:920, margin:'0 auto', padding:16}}>
@@ -120,7 +120,7 @@ export default function App(){
     {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err} — running in mock mode if backend down.</div>}
     {loading && <div style={{color:'#666'}}>Thinking…</div>}
 
-    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.showFeedback ? s.evaluations : null} lastMove={last && last.x>=0 ? [last.x,last.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
+    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.showFeedback ? s.evaluations : null} lastMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
     {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted faint point (A–E) on the board</div>}
 
     <div style={{marginTop:12, display:'grid', gap:12}}>
