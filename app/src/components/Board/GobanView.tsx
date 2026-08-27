@@ -16,9 +16,6 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
   const signMap = toSignMap(board)
   const candMap = new Map<string, Candidate>()
   if(candidates) for(const c of candidates) candMap.set(`${c.x},${c.y}`, c)
-  // map evaluations for quick lookup — these are for PREVIOUS turn (feedback), not current candidates
-  const evalMap = new Map<string, Candidate & {gap:number}>()
-  if(evaluations) for(const e of evaluations) evalMap.set(`${e.x},${e.y}`, e)
 
   const stars = starPoints()
 
@@ -58,29 +55,28 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
             <text x={cx} y={cy+4} textAnchor="middle" fontSize={12} fontWeight={700} fill="#7a5a1a" opacity={0.75}>{c.label}</text>
           </g>
         })}
-        {/* feedback for PREVIOUS turn — show alternative candidates as small muted dots (not current options) */}
-        {evaluations && evaluations.map(e=>{
-          // don't duplicate the stone just played (halo already shows it)
-          if(lastMove && e.x===lastMove[0] && e.y===lastMove[1]) return null
-          // if this position is now a current candidate, skip to avoid double-marking (current faint takes precedence)
-          if(candMap.has(`${e.x},${e.y}`)) return null
-          // only show if that point is still empty (no stone)
-          if(signMap[e.y]?.[e.x]!==0) return null
-          const cx = PAD + e.x*CELL, cy= PAD + e.y*CELL
-          const col = e.gap>0.04 ? '#c0392b' : e.gap>0.02 ? '#b7791f' : '#27864a'
-          const bg = e.gap>0.04 ? '#ffcccc' : e.gap>0.02 ? '#fff0a0' : '#d6f0d6'
-          return <g key={`eval-${e.label}`} opacity={0.55}>
-            <circle cx={cx} cy={cy} r={9} fill={bg} stroke={col} strokeWidth={1.2} />
-            <text x={cx} y={cy+3} textAnchor="middle" fontSize={8} fontWeight={700} fill={col}>{e.label}</text>
-          </g>
-        })}
-        {/* click targets */}
+        {/* click targets — below feedback so feedback stays visible */}
         {Array.from({length:SIZE},(_,y)=> Array.from({length:SIZE},(_,x)=>{
           const cx = PAD + x*CELL, cy= PAD + y*CELL
-          // don't overlay stone clicks when there's a candidate marker (already clickable)
           if(candMap.has(`${x},${y}`)) return null
           return <circle key={`hit-${x}-${y}`} cx={cx} cy={cy} r={14} fill="transparent" style={{cursor:'pointer'}} onClick={()=>onVertexClick(x,y)}/>
         }))}
+        {/* feedback for PREVIOUS turn — on top of everything */}
+        {evaluations && evaluations.map(e=>{
+          if(signMap[e.y]?.[e.x]!==0 && !(lastMove && e.x===lastMove[0] && e.y===lastMove[1])) return null
+          const isPicked = lastMove && e.x===lastMove[0] && e.y===lastMove[1]
+          if(isPicked) return null
+          const cx = PAD + e.x*CELL, cy= PAD + e.y*CELL
+          const col = e.gap>0.04 ? '#c0392b' : e.gap>0.02 ? '#b7791f' : '#27864a'
+          const bg = e.gap>0.04 ? '#ffcccc' : e.gap>0.02 ? '#fff6b0' : '#c8f0c8'
+          const isOverlap = candMap.has(`${e.x},${e.y}`)
+          const ox = isOverlap ? 11 : 0
+          const oy = isOverlap ? -11 : 0
+          return <g key={`eval-${e.label}`} style={{pointerEvents:'none'}}>
+            <circle cx={cx+ox} cy={cy+oy} r={isOverlap? 8 : 10} fill={bg} fillOpacity={0.96} stroke={col} strokeWidth={1.8} strokeOpacity={1}/>
+            <text x={cx+ox} y={cy+oy+3.5} textAnchor="middle" fontSize={isOverlap?7:9} fontWeight={800} fill={col}>{e.label}</text>
+          </g>
+        })}
         {/* coordinates */}
         {Array.from({length:SIZE},(_,i)=>{
           const lab = String.fromCharCode(65+i + (i>=8?1:0)) // skip I
