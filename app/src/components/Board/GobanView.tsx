@@ -53,15 +53,20 @@ export function GobanView({board, candidates, evaluations, lastMove, feedbackMov
           const v = signMap[ly][lx]
           return <circle cx={cx} cy={cy} r={7} fill="none" stroke={v===1?'#fff':'#111'} strokeWidth={2} opacity={0.9} style={{pointerEvents:'none'}}/>
         })()}
-        {/* feedback halo for your last move — rank-graduated, stays after enemy moves */}
+        {/* feedback halo for your last move — rank-graduated, stays after enemy moves.
+            Also draw a letter badge on top so the picked move is labeled like the others. */}
         {feedbackMove && (()=>{
           const [lx,ly] = feedbackMove
           if(signMap[ly]?.[lx]===0) return null
           const cx = PAD + lx*CELL, cy= PAD + ly*CELL
-          const gap = evaluations?.find(e=> e.x===lx && e.y===ly)?.gap
-          if(gap===undefined) return null
-          const col = gapColor(gap, rank).hex
-          return <circle cx={cx} cy={cy} r={19} fill="none" stroke={col} strokeWidth={3.5} opacity={0.95} style={{pointerEvents:'none'}}/>
+          const ev = evaluations?.find(e=> e.x===lx && e.y===ly)
+          if(!ev) return null
+          const {hex, bg} = gapColor(ev.gap, rank)
+          return <g style={{pointerEvents:'none'}}>
+            <circle cx={cx} cy={cy} r={19} fill="none" stroke={hex} strokeWidth={3.5} opacity={0.95}/>
+            <circle cx={cx} cy={cy} r={11} fill={bg} fillOpacity={0.98} stroke={hex} strokeWidth={1.8}/>
+            <text x={cx} y={cy+4} textAnchor="middle" fontSize={11} fontWeight={800} fill={hex}>{ev.label}</text>
+          </g>
         })()}
         {/* current candidates — always faint, never tinted by old feedback */}
         {candidates && candidates.map(c=>{

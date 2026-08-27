@@ -11,6 +11,10 @@ const engine = new KatagoEngine()
 
 const boardSchema = z.array(z.array(z.number().min(-1).max(1))).length(9)
 
+// KataGo skips the letter 'I' for the 9th column — use 'J' for x=8.
+const colChar = (x:number)=> String.fromCharCode(65 + (x>=8 ? x+1 : x))
+const toX = (c:string)=>{ const v=c.charCodeAt(0)-65; return v>=8 ? v-1 : v }
+
 app.get('/health', async()=>({ok:true, mode: engine.mode, ranks: RANKS}))
 app.get('/ranks', async()=>({ranks: RANKS}))
 
@@ -33,7 +37,7 @@ app.post('/candidates', async(req, reply)=>{
       const initStones: [string,string][] = []
       const sign = board as number[][]
       const movesArr: [string,string][] = []
-      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), String.fromCharCode(65+x)+(9-y)])
+      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), colChar(x)+(9-y)])
       const query = {
         id: `c-${Date.now()}`,
         moves: movesArr,
@@ -50,22 +54,28 @@ app.post('/candidates', async(req, reply)=>{
       }
       const res = await engine.query(query, 15000) as any
       const infos = res?.moveInfos || res?.result?.moveInfos || []
-      const best = infos.reduce((b:any, c:any)=> (c.winrate > (b.winrate||0) ? c : b), infos[0] || {winrate:0.5, prior:0.1, move:"E5", scoreLead:0})
-      const toX = (coord:string)=>{ const c=coord.charCodeAt(0)-65; return c>=8? c-1 : c }
-      const mapped = infos.slice(0, Math.min(n, infos.length)).map((info:any, idx:number)=>{
+      // Build n distinct moves, skipping pass and occupied/out-of-range coords, padded to exactly n.
+      const seen = new Set<string>()
+      const mapped: any[] = []
+      for(const info of infos){
+        if(mapped.length>=n) break
         const coord = (info.move as string) || "E5"
-        const x = coord==="pass" ? 4 : toX(coord)
-        const y = coord==="pass" ? 4 : (9 - parseInt(coord.slice(1) || "5"))
-        return {
-          x: Math.max(0,Math.min(8,x)),
-          y: Math.max(0,Math.min(8,y)),
-          label: 'ABCDE'[idx % 5] || 'A',
+        if(coord==="pass") continue
+        const x = toX(coord)
+        const y = 9 - parseInt(coord.slice(1) || "5")
+        if(x<0||x>8||y<0||y>8) continue
+        const key = `${x},${y}`
+        if(seen.has(key)) continue
+        seen.add(key)
+        mapped.push({
+          x, y,
+          label: 'ABCDE'[mapped.length % 5] || 'A',
           humanPolicy: info.humanPrior ?? info.prior ?? info.policy ?? 0.1,
           strongWinrate: info.winrate ?? 0.5,
           strongScore: info.scoreLead ?? 0,
           tag: (info.winrate ?? 0.5) > 0.53 ? 'good' : (info.winrate ?? 0.5) < 0.45 ? 'overconcentrated' : 'ok'
-        }
-      })
+        })
+      }
       return { moves: mapped, meta: { humanModel: 'b18c384nbt-humanv0', strongModel: 'strong', visits: maxVisits || 150, mode: 'real', profile } }
     } catch (e: any) {
       console.error('Real candidates error:', e.message)
@@ -94,12 +104,11 @@ app.post('/genmove', async(req, reply)=>{
       const initStones: [string,string][] = []
       const sign = board as number[][]
       const movesArr: [string,string][] = []
-      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), String.fromCharCode(65+x)+(9-y)])
+      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), colChar(x)+(9-y)])
       const res = await engine.query({ id: `g-${Date.now()}`, moves: movesArr, initialStones: initStones, rules: 'japanese', komi: 7, boardXSize: 9, boardYSize: 9, analyzeTurns: [movesArr.length || 0], maxVisits: maxVisits || 150, includePolicy: true, includeOwnership: false, overrideSettings: { humanSLProfile: profile } }, 15000) as any
       const best = res?.moveInfos?.[0] || res?.result?.moveInfos?.[0] || { winrate: 0.5, prior: 0.1, move: "E5", scoreLead: 0 }
       const pickCoord = (best?.move as string) || "E5"
       if(pickCoord==="pass") return { move: { x: 4, y: 4, pass: true }, winrate: best?.winrate || 0.5, scoreLead: best?.scoreLead || 0 }
-      const toX = (c:string)=>{ const v=c.charCodeAt(0)-65; return v>=8? v-1 : v }
       const cx = toX(pickCoord)
       const cy = 9 - parseInt(pickCoord.slice(1) || "5")
       return { move: { x: Math.max(0,Math.min(8,cx)), y: Math.max(0,Math.min(8,cy)), pass: false }, winrate: best?.winrate || 0.5, scoreLead: best?.scoreLead || 0 }
@@ -129,9 +138,9 @@ app.post('/evaluate', async(req, reply)=>{
     try{
       const sign = board as number[][]
       const movesArr: [string,string][] = []
-      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), String.fromCharCode(65+(x>=8?x+1:x))+(9-y)])
+      for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(sign[y][x]!==0) movesArr.push([(sign[y][x]===1?'B':'W'), colChar(x)+(9-y)])
       // also include the move to evaluate as next move
-      const evalCoord = String.fromCharCode(65+(move.x>=8?move.x+1:move.x))+(9-move.y)
+      const evalCoord = colChar(move.x)+(9-move.y)
       const query = {
         id: `e-${Date.now()}`,
         moves: [...movesArr, [toMove, evalCoord] as [string,string]],
