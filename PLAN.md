@@ -1,6 +1,31 @@
 # Plan — 9×9 KataGo Teaching Game
 
-> Source of truth is `README.md`; this file is the executable checklist.
+> Executable checklist — run top to bottom. `README.md` is the pitch; this is the build order.
+
+## Prerequisites
+
+- Node 20+, npm/pnpm, Docker (for KataGo), Python not required. KataGo binary + 2 `.bin.gz` in `server/models/` (gitignored, `scripts/download-models.sh`).
+- No secrets — CORS origin is PWA host, models are public releases.
+
+## Bootstrap (copy-paste)
+
+```bash
+npm create vite@latest app -- --template react-ts
+cd app && npm i @sabaki/shudan @sabaki/go-board @sabaki/sgf zustand @tanstack/react-query vite-plugin-pwa
+npm i -D vitest @testing-library/react playwright eslint prettier
+# server (Node):
+mkdir server && cd server && npm init -y && npm i fastify && npm i -D typescript tsx @types/node
+# android later: npm i -D @capacitor/core @capacitor/cli && npx cap init && npx cap add android
+```
+
+## Core Types (shared)
+
+```ts
+type Color = 1|-1; type Vertex = [x:number,y:number] // 0..8
+type Candidate = {x:number,y:number,label:string,humanPolicy:number,strongWinrate:number,strongScore:number,tag?:string}
+type Strategy = 'good-vs-tempting'|'human-only'|'tesuji'|'blunder-check'|'strong-only'
+type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
+```
 
 ## Decisions to Lock Early
 
@@ -15,61 +40,51 @@
 
 ## M0 — Scaffold (1–2 days) — *no KataGo yet*
 
-- [ ] `app/` Vite+TS+React, `vite-plugin-pwa`, ESLint/Prettier, Vitest; `npm i @sabaki/shudan @sabaki/go-board @sabaki/sgf Zustand`
-- [ ] Board via `@sabaki/shudan` (signMap/paintMap) + A–E markers, last-move/ko highlight, responsive + touch
-- [ ] Client `goban.ts` wraps `@sabaki/go-board` (capture/ko/suicide/legality); scoring via board lib + server `scoreLead`
-- [ ] Basic play loop vs random/pseudo opponent, pass (2× ends), undo, new game, SGF via `@sabaki/sgf`
-- [ ] Rank & `n` selector UI (no backend wiring yet — uses local random candidates)
+- [ ] Create `app/` (Vite+TS+React), wire `vite-plugin-pwa` manifest + Workbox, ESLint/Prettier, Vitest
+- [ ] `lib/goban.ts`: wrap `@sabaki/go-board` → `new Board(9)`, `makeMove`, `isLegal`, `getLiberties`; `lib/sgf.ts` → `sgf.parse/stringify`
+- [ ] `components/Board/`: `Shudan` with `signMap`/`paintMap`/`ghostStoneMap`, A–E markers, last-move glow, ko illegal dim, `touch-action:none`
+- [ ] Game loop: `gameStore` (Zustand) holds `board/history/turn`, pass×2 ends, undo, new game, random opponent
+- [ ] Rank & `n` selector (slider + 3/5 toggle), random candidates stub, SGF export downloads `.sgf`
+- [ ] Tests: `goban.test.ts` (capture/ko/suicide), `sgf.test.ts` round-trip, Playwright e2e plays one game
 
-**Done when:** can play a full 9×9 game in browser, tap stone, see captures, on refresh still PWA shell.
+**Done when:** `npm run dev` plays full 9×9 vs random, captures work, PWA installs, `npm test` passes.
 
 ## M1 — KataGo Server (2–4 days)
 
-- [ ] `server/` service: spawn `katago analysis` engine, JSON lines protocol, `boardSize:9`, `komi:7` (or 7.5)
-- [ ] Load models: `b28c512nbt-humanv0` (or `b18c384nbt`) + strong `b28c512nbt` — document in `KATAGO_INTEGRATION.md`
-- [ ] HumanSL difficulty mapping: verify rank → model/profile param (single human model with rank conditioning vs multiple bins). Expose `GET /ranks`.
-- [ ] Endpoints:
-  - `POST /genmove` — `{ board, player, rank } → { move, winrate }` (opponent)
-  - `POST /candidates` — `{ board, rank, n, strategy } → { moves: [{x,y, humanPolicy, strongWinrate, tag}] }` (player's n choices)
-  - `POST /evaluate` — `{ board, move } → { winrate, scoreLead, ownership }` for feedback
-  - WS `subscribe` for streaming analysis (optional)
-- [ ] Caching & batching: debounce board position, reuse search
-- [ ] Docker + `docker-compose.yml` (katago binary + model mount), healthcheck, model download script (gitignored)
-- [ ] Frontend wiring: replace random with real candidates/opponent moves, loading states
+- [ ] `server/src/katago.ts`: spawn `katago analysis`, JSON-lines stdin/stdout, queue by id, parse `moveInfos[]` → `P_h`/`W_s`
+- [ ] Load `b28c512nbt-humanv0` + strong `b28c512nbt`, verify `humanSLProfile`/`rank` flag (`--help`), freeze `komi 7` (or 7.5) + `boardXSize:9`
+- [ ] `GET /ranks` returns mapping; `POST /genmove|/candidates|/evaluate` per `ARCHITECTURE.md` (validate with Zod)
+- [ ] Candidate picker (LEARNING_DESIGN S1): query both nets @ ~150 visits, compute `G`, filter `P_h` top-8, pick 3 good (`G≤2%`) + 2 bad (`G≥4–6%`), shuffle
+- [ ] Cache by `hash(board)+rank+strategy`, debounce, `scripts/download-models.sh` + `Dockerfile` + `docker-compose.yml` healthcheck
+- [ ] Frontend: `katagoClient.ts` + TanStack Query, replace random stub, loading spinners, error toast on engine down
 
-**Done when:** pick “10k”, get 5 HumanSL-conditioned move suggestions + opponent replies at that level.
+**Done when:** `curl POST /candidates` at 10k returns 5 shuffled with policy/winrate; UI shows A–E and opponent replies at rank.
 
 ## M2 — Choice UI & Feedback (2–3 days)
 
-- [ ] Choice markers A–E (shuffled), tap to commit, confirm/cancel, keyboard 1–5
-- [ ] Strategy selector: `good-tempering` (default), `human-only`, `tesuji`, `blunder-check` — backed by server `strategy` param
-- [ ] Feedback panel *after* pick: ordered list, human% vs strong win-rate, Δ win-rate, ownership heatmap toggle
-- [ ] Win-rate graph over moves (Recharts or custom canvas), score estimate bar
-- [ ] Teachable moment copy: short tag per move (atari, cut, shape) — rule-based from ownership/liberties, no LLM yet
-- [ ] Settings persistence (localStorage), game history, SGF import/export (full)
+- [ ] Markers A–E shuffled, tap→commit (confirm/cancel), keys 1–5; strategy selector hits `strategy` param
+- [ ] `FeedbackPanel`: ordered by `W_s`, colors by `G` (≤2% green, 2–4% yellow, >4% red), `P_h%` + `Δ` + tag (`atari`/`cut`/`empty triangle` from lib checks)
+- [ ] Ownership heatmap toggle (from `evaluate`), win-rate sparkline + score bar (Recharts or canvas)
+- [ ] Settings in `localStorage`, full SGF import (file drop) + export, game history list
 
-**Done when:** every player move is a 5-way choice with post-hoc ranking that feels instructive.
+**Done when:** every player turn is 5-way, pick reveals ordered feedback, graph updates, SGF round-trips.
 
 ## M3 — Learning Polish (1–2 weeks, iterative)
 
-- [ ] Tune “tempting bad” picker: gap thresholds per rank, deduplicate nearby points, avoid symmetric dupes
-- [ ] Rank-graduated spread: wider at kyu, tighter at dan; A/B test thresholds
-- [ ] Hint toggle: free-play (no hints) vs choice mode per game or per move
-- [ ] Review mode: step through SGF with same candidate overlay, mark mistakes spaced-repetition
-- [ ] Optional LLM explainer (server-side, off by default): “Why B is overconcentrated here”
-- [ ] Sound, animations, atari alert, pass/resign/scoring UX, komi selector
+- [ ] Tune picker: rank thresholds per LEARNING_DESIGN, dedup adjacent/symmetric, shrink `n` if not enough moves
+- [ ] Rank-graduated spread + after 3 blunders inject S3 confidence puzzle; hint toggle (choice vs free-play)
+- [ ] Review mode: step SGF with same overlay, collect worst `G` for spaced-repetition
+- [ ] Polish: sound/haptics, atari alert, pass/resign/scoring confirm, komi fixed
 
-**Done when:** 10k and 3d both feel distinct; testers say “I’m learning to avoid X”.
+**Done when:** 10k vs 3d feel different in logs (`mean G(picked)` trending ↓).
 
 ## M4 — Android Portability (1–2 days)
 
-- [ ] PWA audit: manifest, icons (512×512), `display:standalone`, offline shell, Lighthouse ≥95
-- [ ] Capacitor: `npm i @capacitor/core @capacitor/cli`, `npx cap init`, `npx cap add android`, `npx cap sync`, test on emulator/device
-- [ ] Touch polish: prevent scroll/zoom on board, haptics, larger tap targets, safe-area insets
-- [ ] Store assets: screenshots, feature graphic, Play Console listing, versioning `android/app/build.gradle`
-- [ ] Trusted Web Activity alternative documented if PWA-only publish preferred
+- [ ] PWA audit: icons 512×512, `display:standalone`, Workbox shell, Lighthouse ≥95
+- [ ] Capacitor: `cap init/add/sync`, test emulator/device; touch: no scroll/zoom on board, haptics, safe-area
+- [ ] Store: screenshots, Play Console, version `android/app/build.gradle`; TWA alt documented
 
-**Done when:** `npm run build && npx cap open android` yields installable APK/AAB that plays offline shell (server still remote).
+**Done when:** `npm run build && npx cap open android` → installable AAB, offline shell works.
 
 ## M5 — Stretch
 
@@ -85,17 +100,23 @@
 
 | Risk | Mitigation |
 |---|---|
-| KataGo server cost/latency on mobile | 9×9 low visits (50–200), CPU fine; cache; edge region close to users; WASM fallback later |
-| HumanSL rank conditioning undocumented | Spike M1 early, read `katago` `--help`, inspect open-source human model configs; fallback: single human model with `humanSLProfile` interpolation |
-| Board UX on small screens | SVG scales; test on 360×640; markers large; pinch disabled only on board |
-| Move candidates feel arbitrary | Log humanPolicy vs strong gaps; add telemetry toggle; iterate thresholds with 9×9 dan review |
+| KataGo cost/latency | 150 visits on 9×9 CPU fine; cache; WASM fallback M5 |
+| HumanSL rank flag unknown | Spike M1 `katago --help`; fallback single model + interpolation |
+| Small-screen board | Shudan scales; test 360×640; `touch-action:none` only on board |
+| Candidates feel arbitrary | Log `P_h` vs `W_s`; tune thresholds with dan review |
 
-## Definition of Ready for “v0 Playable”
+## Testing
 
-- New game → pick rank → play 9×9 vs HumanSL → each player turn shows n choices → feedback → finish → SGF download → installable on Android.
+- Unit: `goban` (capture/ko), `sgf` round-trip, candidate picker gaps (Vitest)
+- E2E: Playwright plays full game via `/candidates` mock + real server, asserts feedback ordering
+- Manual: play 20 games at 10k and 3d, log `G(picked)`
+
+## Definition of Ready for v0
+
+- New game → pick rank → 9×9 vs HumanSL → n-choice each turn → feedback + graph → scoring → SGF dl → PWA installable → AAB builds
 
 ## Open Questions
 
-- Which HumanSL net exactly (`b18c384nbt` vs `b28c512nbt-humanv0` newest)? Pin by testing policy diversity vs size.
-- Exact win-rate gap thresholds for “tempting bad” per rank — tune empirically.
-- Whether to show any pre-pick hint (e.g. “2 of these lose ≥5%”) — leans no, to preserve choice.
+- Which HumanSL net (`b18c384nbt` vs `b28c512nbt-humanv0`)? Pin by policy diversity test
+- Exact gap thresholds per rank — tune empirically on 100 9×9 positions
+- Pre-pick hint? Leans no
