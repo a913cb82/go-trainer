@@ -82,6 +82,7 @@ app.post('/candidates', async(req, reply)=>{
       const infos = validInfos(res?.moveInfos || res?.result?.moveInfos || [])
       // Human-style candidates are ranked by the HumanSL policy, not MCTS result order.
       const humanInfos = [...infos].sort((a,b)=> humanPrior(b)-humanPrior(a))
+      const bestScore = humanInfos.reduce((m:number, i:any)=> Math.max(m, Number(i.scoreLead ?? i.scoreMean ?? 0)), -Infinity)
       const seen = new Set<string>()
       const mapped: any[] = []
       for(const info of humanInfos){
@@ -92,13 +93,16 @@ app.post('/candidates', async(req, reply)=>{
         const key = `${x},${y}`
         if(seen.has(key)) continue
         seen.add(key)
+        const score = Number(info.scoreLead ?? info.scoreMean ?? 0)
+        const gap = bestScore - score
         mapped.push({
           x, y,
           label: 'ABCDE'[mapped.length % 5] || 'A',
           humanPolicy: humanPrior(info),
           strongWinrate: info.winrate ?? 0.5,
-          strongScore: info.scoreLead ?? 0,
-          tag: (info.winrate ?? 0.5) > 0.53 ? 'good' : (info.winrate ?? 0.5) < 0.45 ? 'overconcentrated' : 'ok'
+          strongScore: score,
+          scoreGap: Math.max(0, Math.round(gap*10)/10),
+          tag: gap <= 1.5 ? 'good' : gap >= 4 ? 'overconcentrated' : 'ok'
         })
       }
       return { moves: mapped, meta: { humanModel: 'b18c384nbt-humanv0', strongModel: 'strong', visits: maxVisits || 150, mode: 'real', profile } }

@@ -2,7 +2,7 @@ const BASE = '/api'
 
 export type Rank = '15k'|'12k'|'10k'|'8k'|'5k'|'3k'|'1k'|'1d'|'3d'
 export type Strategy = 'good-vs-tempting'|'human-only'|'tesuji'|'blunder-check'|'strong-only'
-export type Candidate = {x:number,y:number,label:string,humanPolicy:number,strongWinrate:number,strongScore:number,tag?:string}
+export type Candidate = {x:number,y:number,label:string,humanPolicy:number,strongWinrate:number,strongScore:number,scoreGap?:number,tag?:string}
 export type HistoryMove = {x:number,y:number,color:1|-1}
 
 async function post(path:string, body:any){

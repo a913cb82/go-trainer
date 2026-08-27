@@ -5,10 +5,12 @@ function idx(r:Rank){ return order.indexOf(r) }
 
 export function thresholds(rank:Rank){
   const i = idx(rank)
-  if(i<=1) return {good:0.02, bad:0.06}
-  if(i<=3) return {good:0.02, bad:0.045}
-  if(i<=5) return {good:0.015, bad:0.035}
-  return {good:0.01, bad:0.025}
+  // Points (predicted score-lead deltas), rank-graduated. Stronger ranks tolerate
+  // smaller mistakes. 1.5 pts ≈ a meaningful 9x9 mistake.
+  if(i<=1) return {good:1.5, bad:4}    // 15k-12k
+  if(i<=3) return {good:1.5, bad:3.2}  // 10k-8k
+  if(i<=5) return {good:1, bad:2.5}    // 5k-3k
+  return {good:0.8, bad:1.8}           // 1k-3d
 }
 
 export function gapColor(gap:number, rank:Rank){

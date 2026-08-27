@@ -93,12 +93,14 @@ export function mockCandidates(signMap:number[][], rank:Rank, n:number, strategy
   }
 
   // attach gaps and shuffle
+  const bestScore = Math.max(...pool.map(p=> (p.ws-0.5)*14))
   const withScores = pool.map(p=>({
     x:p.x, y:p.y,
     humanPolicy: Math.round(p.ph*1000)/1000,
     strongWinrate: Math.round(p.ws*1000)/1000,
     strongScore: Math.round((p.ws-0.5)*14*10)/10, // fake scoreLead
-    tag: bestWs - p.ws <0.02 ? 'good' : bestWs - p.ws >0.05 ? 'overconcentrated' : 'ok'
+    scoreGap: Math.max(0, Math.round((bestScore - (p.ws-0.5)*14)*10)/10),
+    tag: (bestScore - (p.ws-0.5)*14) <= 1.5 ? 'good' : (bestScore - (p.ws-0.5)*14) >= 4 ? 'overconcentrated' : 'ok'
   }))
   // shuffle
   for(let i=withScores.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=withScores[i]; withScores[i]=withScores[j]; withScores[j]=t }

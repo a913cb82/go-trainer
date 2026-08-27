@@ -10,17 +10,17 @@ Every player turn shows `n` moves (A–E) to choose from. The teaching signal is
 ## Strategies
 
 **S1 — Good-vs-Tempting-Bad (default): `n=5` → 3 good + 2 tempting bad, shuffled, unlabeled.**
-- Good: `P_h` top-8, `G ≤ 1.5–2%`, strong top-10.
-- Tempting bad: `P_h` top-8, `G ≥ 4–6%` (tighter at higher rank). Classic human bias the player must learn to reject.
+- Good: `P_h` top-8, `G ≤ 1–1.5 pts`, strong top-10.
+- Tempting bad: `P_h` top-8, `G ≥ 2.5–4 pts` (tighter at higher rank). Classic human bias the player must learn to reject.
 
-Rank thresholds:
+Rank thresholds (in predicted points, from `strongScore`/`scoreLead`):
 
 | Rank | Good `G` | Bad `G` | Spread |
 |------|----------|---------|--------|
-| 15k–10k | ≤2% | ≥6% | ~8% |
-| 9k–5k  | ≤2% | ≥4.5% | ~6% |
-| 4k–1k  | ≤1.5% | ≥3.5% | ~4% |
-| Dan    | ≤1% | ≥2.5% | ~2–3% |
+| 15k–12k | ≤1.5 | ≥4.0 | ~5 pts |
+| 10k–8k  | ≤1.5 | ≥3.2 | ~4 pts |
+| 5k–3k   | ≤1.0 | ≥2.5 | ~3 pts |
+| 1k–3d   | ≤0.8 | ≥1.8 | ~2 pts |
 
 **S0 — Human top-N:** top-N by `P_h` only. Realistic but low contrast.
 

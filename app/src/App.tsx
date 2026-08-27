@@ -41,11 +41,11 @@ export default function App(){
     // evaluate all candidates to show feedback with gaps
     const boardAfter = boardSignMap(s.board) // note: s.board updated after apply? need to capture before next render; use signMap before move for eval is more accurate
     // Instead, evaluate using the board before move for each candidate's resulting position?
-    // Simplifier: use returned humanPolicy/strongWinrate gaps
-    const best = Math.max(...was.map((x:any)=>x.strongWinrate))
-    const evals = was.map((x:any)=>({...x, gap: best - x.strongWinrate}))
+    // Simplifier: use returned humanPolicy/strongScore gaps — rank by predicted points
+    const best = Math.max(...was.map((x:any)=>x.strongScore ?? 0))
+    const evals = was.map((x:any)=>({...x, gap: best - (x.strongScore ?? 0)}))
     s.setEvaluations(evals)
-    const pickedGap = best - c.strongWinrate
+    const pickedGap = best - (c.strongScore ?? 0)
     s.pushWinrate(c.strongWinrate)
     // if blunder streak logic: if 3 consecutive pickedGap>0.03, next strategy would be blunder-check (handled server next time)
     void pickedGap; void boardAfter
