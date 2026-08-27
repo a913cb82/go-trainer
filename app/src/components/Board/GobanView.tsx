@@ -34,19 +34,25 @@ export function GobanView({board, candidates, evaluations, lastMove, onVertexCli
         })}
         {/* star points */}
         {stars.map(([x,y])=> <circle key={`${x}-${y}`} cx={PAD+x*CELL} cy={PAD+y*CELL} r={4} fill="#3e2b15"/>)}
-        {/* stones — halo for last move colored by feedback gap */}
+        {/* stones */}
         {signMap.flatMap((row,y)=> row.map((v,x)=>{
           if(v===0) return null
           const cx = PAD + x*CELL, cy= PAD + y*CELL
-          const isLast = lastMove && lastMove[0]===x && lastMove[1]===y
-          const lastGap = isLast && evaluations ? evaluations.find(e=> e.x===x && e.y===y)?.gap : undefined
-          const haloCol = lastGap===undefined ? (v===1?'#fff':'#111') : lastGap>0.04 ? '#c0392b' : lastGap>0.02 ? '#b7791f' : '#27864a'
-          const haloW = lastGap===undefined ? 2 : 3
           return <g key={`${x}-${y}`}>
             <circle cx={cx} cy={cy} r={16} fill={v===1?'#111':'#fdf8ec'} stroke={v===1?'#000':'#8a7040'} strokeWidth={0.8}/>
-            {isLast && <circle cx={cx} cy={cy} r={7} fill="none" stroke={haloCol} strokeWidth={haloW} opacity={0.95}/>}
           </g>
         }))}
+        {/* last-move halo — on top of stones, outside stone so visible, colored by feedback */}
+        {lastMove && (()=>{
+          const [lx,ly] = lastMove
+          if(signMap[ly]?.[lx]===0) return null
+          const cx = PAD + lx*CELL, cy= PAD + ly*CELL
+          const lastGap = evaluations?.find(e=> e.x===lx && e.y===ly)?.gap
+          const haloCol = lastGap===undefined ? '#fff' : lastGap>0.04 ? '#c0392b' : lastGap>0.02 ? '#b7791f' : '#27864a'
+          const haloW = lastGap===undefined ? 2 : 3.5
+          const r = lastGap===undefined ? 7 : 19
+          return <circle cx={cx} cy={cy} r={r} fill="none" stroke={haloCol} strokeWidth={haloW} opacity={0.98} style={{pointerEvents:'none'}}/>
+        })()}
         {/* current candidates — always faint, never tinted by old feedback */}
         {candidates && candidates.map(c=>{
           const cx = PAD + c.x*CELL, cy= PAD + c.y*CELL
