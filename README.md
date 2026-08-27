@@ -4,6 +4,8 @@
 
 `AGENTS.md` → `README.md`.
 
+![go-trainer screenshot](media/screenshot.png)
+
 ## How it plays
 Pick rank (15k→3d) and strategy (`n=5` good-vs-tempting-bad). Board shows *n* faint options; tap one. Values revealed after — halo + predicted points/tiny winrate, rank-graduated colors. 9×9 only.
 
