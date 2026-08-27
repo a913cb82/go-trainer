@@ -93,49 +93,32 @@ cd app    && npm install
 cd ../server && npm install
 ```
 
-### 2. Fetch the KataGo binary
+### 2. Fetch the KataGo binary, models, and runtime libs
 
-The server spawns `katago analysis`. Download a prebuilt binary and place it at `server/katago`:
-
-```bash
-# CUDA build (recommended for a real GPU):
-curl -L -o /tmp/katago.zip \
-  https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-v1.15.3-cuda12.1-cudnn8.9.7-linux-x64.zip
-unzip -o /tmp/katago.zip -d /tmp/katago
-cp /tmp/katago/katago server/katago && chmod +x server/katago
-```
-
-If you don't have CUDA/cuDNN, use the **Eigen (CPU)** build instead — fine for 9×9 up to a few hundred visits. Without any binary, the server runs in **mock** mode (no KataGo).
-
-**Optional GPU libs:** the CUDA build needs `libcublas.so.12`, `libcudnn.so.8`, and the `cuda` drivers; the engine also needs `libzip.so.5`/`libssl.so.1.1`. On a typical CUDA install, set:
-
-```bash
-export LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:/tmp/libs/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
-```
-
-### 3. Fetch the KataGo models
+Run the setup script — it downloads the CUDA KataGo binary to `server/katago`, the HumanSL + strong nets to `server/models/`, bundles the binary's non-default shared libs into `server/libs/`, and writes a 9×9-tuned `server/config/analysis.cfg`. All of these are gitignored.
 
 ```bash
 ./server/scripts/download-models.sh
 ```
 
-This downloads the HumanSL net (`b18c384nbt-humanv0.bin.gz`) to `server/models/human.bin.gz`, a strong net to `server/models/strong.bin.gz`, and writes a 9×9-tuned `server/config/analysis.cfg`. (Edit the script's `KATAGO_*_MODEL_URL` vars to pin different nets.)
+#### What each step does
+- **Binary** (`server/katago`): the CUDA 12.1 build. If you don't have CUDA/cuDNN, use an **Eigen (CPU)** build instead — fine for 9×9 up to a few hundred visits. Without any binary, the server runs in **mock** mode (no KataGo).
+- **Models**: `server/models/b18c384nbt-humanv0.bin.gz` (HumanSL) and `server/models/strong.bin.gz` (strong net for the good-vs-tempting-bad comparison).
+- **Runtime libs** (`server/libs/`): the CUDA binary was built on Ubuntu 20.04 and needs `libssl.so.1.1` and `libzip.so.5`, which **Ubuntu 22.04+ does not ship by default** (22.04 has `libssl.so.3`). The script extracts those `.so` files into `server/libs/`; the server adds that dir to `LD_LIBRARY_PATH` automatically. It also needs `libcublas.so.12`/`libcudnn.so.8` from your CUDA install.
 
-### 4. Run in real mode
+> **If you'd rather not bundle libs**, build KataGo from source (KataGo's own docs recommend this when prebuilt binaries hit `libssl`/`libzip` version mismatches) or install `libssl1.1`/`libzip4` via a package that provides them.
+
+### 3. Run in real mode
 
 ```bash
 cd server
-export KATAGO_MODE=real \
-       KATAGO_BIN=./katago \
-       KATAGO_MODEL=./models/strong.bin.gz \
-       KATAGO_HUMAN_MODEL=./models/b18c384nbt-humanv0.bin.gz \
-       LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:/tmp/libs/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+export KATAGO_MODE=real KATAGO_BIN=./katago
 npm run dev   # http://localhost:3001
 ```
 
-`server/models/*.bin.gz` paths are resolved relative to the server module, so absolute `/home/...` paths are not needed.
+`server/models/*.bin.gz` and `server/libs/` are resolved relative to the server module, so you don't need absolute `/home/...` paths or to set `KATAGO_MODEL`/`KATAGO_HUMAN_MODEL` manually. If your CUDA libraries aren't under `/usr/local/cuda/targets/x86_64-linux/lib`, set `LD_LIBRARY_PATH` to include them.
 
-### 5. Run the app
+### 4. Run the app
 
 ```bash
 cd app && npm run dev   # http://localhost:5173  (proxies /api -> :3001)

@@ -146,14 +146,15 @@ export class KatagoEngine {
     const config = process.env.KATAGO_CONFIG || defaultConfig
     const args = ['analysis','-model',model,'-human-model',humanModel,'-config',config]
     // For human SL: must set profile either in config or overrideSettings per query.
-    // Prepend CUDA + libzip/libssl lib dirs; also add server root so a self-contained
-    // copy of the libs in server/ resolves too.
+    // Prepend CUDA + libzip/libssl lib dirs. The portable `server/libs/` dir holds
+    // the non-default shared libs the CUDA binary needs (libssl.so.1.1, libzip.so.5);
+    // `server/` too, since the prebuilt binary may be run from there.
     const ld = [
       process.env.LD_LIBRARY_PATH || '',
       '/usr/local/cuda/targets/x86_64-linux/lib',
+      resolve(SERVER_ROOT, 'libs'),
       SERVER_ROOT,
-      resolve(SERVER_ROOT, '..', 'libs'),
-      '/tmp/libs/usr/lib/x86_64-linux-gnu'
+      resolve(SERVER_ROOT, '..', 'libs')
     ].filter(Boolean).join(':')
     this.proc = spawn(bin, args, {stdio:['pipe','pipe','pipe'], cwd: process.cwd(), env: {...process.env, LD_LIBRARY_PATH: ld}})
     this.proc.stdout?.on('data',d=> this.onData(d.toString()))
