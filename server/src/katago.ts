@@ -131,9 +131,10 @@ export class KatagoEngine {
     }
   }
   spawn(bin:string){
-    const model = process.env.KATAGO_MODEL || 'server/models/strong.bin.gz'
-    const humanModel = process.env.KATAGO_HUMAN_MODEL || 'server/models/human.bin.gz'
+    const model = process.env.KATAGO_MODEL || 'server/models/b18c384nbt-humanv0.bin.gz'
+    const humanModel = process.env.KATAGO_HUMAN_MODEL || 'server/models/b18c384nbt-humanv0.bin.gz'
     const args = ['analysis','-model',model,'-human-model',humanModel,'-config','server/config/analysis.cfg']
+    // For human SL: must set profile either in config or overrideSettings per query
     this.proc = spawn(bin, args, {stdio:['pipe','pipe','pipe']})
     this.proc.stdout?.on('data',d=> this.onData(d.toString()))
     this.proc.stderr?.on('data',d=> console.error('[katago]', d.toString().slice(0,500)))
@@ -150,6 +151,11 @@ export class KatagoEngine {
   }
   async query(obj:any, timeoutMs=3000): Promise<any>{
     if(this.mode==='mock') throw new Error('mock mode')
+    // Inject humanSLProfile if rank provided and query is analysis-style
+    if(obj.rank && !obj.overrideSettings?.humanSLProfile){
+      const profile = 'preaz_' + (obj.rank.includes('k') ? obj.rank.replace('k','') : obj.rank.replace('d','')) // rough mapping
+      obj.overrideSettings = {...(obj.overrideSettings||{}), humanSLProfile: 'preaz_10k'}
+    }
     return new Promise((resolve,reject)=>{
       const id = obj.id || Math.random().toString(36).slice(2)
       obj.id=id
