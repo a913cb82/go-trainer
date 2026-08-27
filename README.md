@@ -5,11 +5,7 @@
 ![go-trainer screenshot](media/screenshot.png)
 
 ## How it plays
-Pick rank (15k→3d) and strategy (`n=5` good-vs-tempting-bad). Board shows *n* faint options; tap one. Values revealed after — halo + predicted points/tiny winrate, rank-graduated colors. 9×9 only.
-
-## Stack
-- **App:** Vite + React + TS + `vite-plugin-pwa`, custom SVG board, `@sabaki/go-board`/`sgf`, Zustand
-- **Server:** Fastify → `katago analysis` (HumanSL `b18c384nbt-humanv0` + strong net), `rank_*` profiles, `includePolicy` → sample by `humanPolicy`
+Play 9x9 Go vs KataGo HumanSL at chosen rank. Pick from `n` moves (some good, some bad) likely to be chosen by player at chosen rank. Optional instant feedback on selected move.
 
 ## Setup
 
