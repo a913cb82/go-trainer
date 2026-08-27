@@ -11,11 +11,11 @@ async function post(path:string, body:any){
 }
 
 export const katago = {
-  candidates: (board:number[][], toMove:'B'|'W', rank:Rank, n:number, strategy:Strategy, maxVisits=150) =>
+  candidates: (board:number[][], toMove:'B'|'W', rank:Rank, n:number, strategy:Strategy, maxVisits=15) =>
     post('/candidates', {board, toMove, rank, n, strategy, maxVisits}) as Promise<{moves:Candidate[], meta:any}>,
-  genmove: (board:number[][], toMove:'B'|'W', rank:Rank, maxVisits=150) =>
+  genmove: (board:number[][], toMove:'B'|'W', rank:Rank, maxVisits=15) =>
     post('/genmove', {board, toMove, rank, maxVisits}) as Promise<{move:{x:number,y:number,pass:boolean}, winrate:number, scoreLead:number}>,
-  evaluate: (board:number[][], move:{x:number,y:number}, toMove:'B'|'W', maxVisits=150) =>
+  evaluate: (board:number[][], move:{x:number,y:number}, toMove:'B'|'W', maxVisits=15) =>
     post('/evaluate', {board, move, toMove, maxVisits}) as Promise<{winrate:number, scoreLead:number, ownership:number[][]}>,
   ranks: async()=> (await (await fetch(`${BASE}/ranks`)).json()).ranks as Rank[],
   health: async()=> await (await fetch(`${BASE}/health`)).json(),
