@@ -10,6 +10,11 @@ Play 9x9 Go vs KataGo HumanSL at chosen rank. Pick from `n` moves (some good, so
 ## Setup
 
 ```bash
+# optional GPU — skip for CPU/mock:
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb && sudo apt update
+sudo apt install cuda-toolkit-12-1 libcudnn8
+
 cd app && npm i && cd ../server && npm i
 ./server/scripts/download-models.sh  # katago→server/katago, nets→server/models/, libs→server/libs/, cfg→server/config/analysis.cfg
 ```
