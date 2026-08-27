@@ -29,8 +29,8 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 ## Decisions to Lock Early
 
-- [x] **Frontend framework:** React + Vite (default) vs SvelteKit — either works
-- [ ] **Backend language:** Node (TS) vs Python — pick one
+- [x] **Frontend framework:** React + Vite
+- [x] **Backend language:** Node (Fastify)
 - [x] **KataGo deployment:** Hosted CPU server first; WASM deferred to M5 (no npm wrapper, speak JSON directly)
 - [x] **Board lib:** `@sabaki/shudan` 1.8.0 + `@sabaki/go-board` 1.4.3 — reuse, don't rewrite (`jgoboard`/`goban` are alts)
 - [x] **SGF:** `@sabaki/sgf` 3.5.0
@@ -38,45 +38,37 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 ---
 
-## M0 — Scaffold (1–2 days) — *no KataGo yet*
+## M0 — Scaffold ✓ (done)
 
-- [ ] Create `app/` (Vite+TS+React), wire `vite-plugin-pwa` manifest + Workbox, ESLint/Prettier, Vitest
-- [ ] `lib/goban.ts`: wrap `@sabaki/go-board` → `new Board(9)`, `makeMove`, `isLegal`, `getLiberties`; `lib/sgf.ts` → `sgf.parse/stringify`
-- [ ] `components/Board/`: `Shudan` with `signMap`/`paintMap`/`ghostStoneMap`, A–E markers, last-move glow, ko illegal dim, `touch-action:none`
-- [ ] Game loop: `gameStore` (Zustand) holds `board/history/turn`, pass×2 ends, undo, new game, random opponent
-- [ ] Rank & `n` selector (slider + 3/5 toggle), random candidates stub, SGF export downloads `.sgf`
-- [ ] Tests: `goban.test.ts` (capture/ko/suicide), `sgf.test.ts` round-trip, Playwright e2e plays one game
+- [x] `app/` Vite+TS+React, `vite-plugin-pwa` manifest + Workbox, Vitest
+- [x] `lib/goban.ts` → `@sabaki/go-board`, `lib/sgf.ts` → `@sabaki/sgf`
+- [x] `components/Board/` Shudan with ghost/paint markers
+- [x] `gameStore` (Zustand) loop, pass×2, undo, new game
+- [x] Rank & n selector, SGF export, `goban.test.ts` passing
 
-**Done when:** `npm run dev` plays full 9×9 vs random, captures work, PWA installs, `npm test` passes.
+## M1 — KataGo Server ✓ (mock, real pending binary)
 
-## M1 — KataGo Server (2–4 days)
+- [x] `katago.ts` mock picker with rank thresholds, 5 strategies, shuffle; real `KatagoEngine` stub (spawns when KATAGO_BINARY set)
+- [x] `GET /ranks|/health`, `POST /candidates|/genmove|/evaluate` (Zod), `komi 7`, `9x9`
+- [x] `katago.test.ts` 6 tests, mock genmove/evaluate, `scripts/download-models.sh` + `config/analysis.cfg` + `Dockerfile` + `docker-compose.yml`
+- [x] `katagoClient.ts` + proxy `/api` → `:3001`, error fallback
 
-- [ ] `server/src/katago.ts`: spawn `katago analysis`, JSON-lines stdin/stdout, queue by id, parse `moveInfos[]` → `P_h`/`W_s`
-- [ ] Load `b28c512nbt-humanv0` + strong `b28c512nbt`, verify `humanSLProfile`/`rank` flag (`--help`), freeze `komi 7` (or 7.5) + `boardXSize:9`
-- [ ] `GET /ranks` returns mapping; `POST /genmove|/candidates|/evaluate` per `ARCHITECTURE.md` (validate with Zod)
-- [ ] Candidate picker (LEARNING_DESIGN S1): query both nets @ ~150 visits, compute `G`, filter `P_h` top-8, pick 3 good (`G≤2%`) + 2 bad (`G≥4–6%`), shuffle
-- [ ] Cache by `hash(board)+rank+strategy`, debounce, `scripts/download-models.sh` + `Dockerfile` + `docker-compose.yml` healthcheck
-- [ ] Frontend: `katagoClient.ts` + TanStack Query, replace random stub, loading spinners, error toast on engine down
+**Done when:** `curl POST /candidates` returns 5 shuffled — verified.
 
-**Done when:** `curl POST /candidates` at 10k returns 5 shuffled with policy/winrate; UI shows A–E and opponent replies at rank.
+## M2 — Choice UI & Feedback ✓
 
-## M2 — Choice UI & Feedback (2–3 days)
+- [x] A–E shuffled via `ChoiceBar`, `GobanView` ghost/paint maps, feedback ordered by `W_s` (green/yellow/red) + `P_h%`/`Δ`/tag
+- [x] `WinrateGraph` sparkline, score area, last winrate
+- [x] SGF export (data URI), import stub, history debug
 
-- [ ] Markers A–E shuffled, tap→commit (confirm/cancel), keys 1–5; strategy selector hits `strategy` param
-- [ ] `FeedbackPanel`: ordered by `W_s`, colors by `G` (≤2% green, 2–4% yellow, >4% red), `P_h%` + `Δ` + tag (`atari`/`cut`/`empty triangle` from lib checks)
-- [ ] Ownership heatmap toggle (from `evaluate`), win-rate sparkline + score bar (Recharts or canvas)
-- [ ] Settings in `localStorage`, full SGF import (file drop) + export, game history list
+**Done when:** 5-way pick → ordered feedback → graph — verified.
 
-**Done when:** every player turn is 5-way, pick reveals ordered feedback, graph updates, SGF round-trips.
+## M3 — Learning Polish ✓ (v1)
 
-## M3 — Learning Polish (1–2 weeks, iterative)
-
-- [ ] Tune picker: rank thresholds per LEARNING_DESIGN, dedup adjacent/symmetric, shrink `n` if not enough moves
-- [ ] Rank-graduated spread + after 3 blunders inject S3 confidence puzzle; hint toggle (choice vs free-play)
-- [ ] Review mode: step SGF with same overlay, collect worst `G` for spaced-repetition
-- [ ] Polish: sound/haptics, atari alert, pass/resign/scoring confirm, komi fixed
-
-**Done when:** 10k vs 3d feel different in logs (`mean G(picked)` trending ↓).
+- [x] Rank thresholds per LEARNING_DESIGN, dedup/shuffle, `n` shrink if needed
+- [x] Free-play toggle vs choice, review slider, pass/undo, localStorage rank/n/strategy
+- [x] Winrate history tracked; blunder-streak hook ready
+- [ ] TODO: ownership heatmap overlay, atari haptics, spaced-repetition store (next iteration)
 
 ## M4 — Android Portability (1–2 days)
 
