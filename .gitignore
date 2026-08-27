@@ -10,3 +10,10 @@ server/models/*.bin
 server/analysis_logs/
 analysis_logs/
 server/katago
+# copied shared libraries (extracted for the KataGo binary; never commit)
+server/libcrypto.so.1.1
+server/libssl.so.1.1
+server/libzip.so.5
+libcrypto.so.1.1
+libssl.so.1.1
+libzip.so.5
