@@ -17,6 +17,7 @@ type State = {
   evaluations: (Candidate & {gap:number})[]|null
   evalsHistory: ((Candidate & {gap:number})[]|null)[]
   showFeedback: boolean
+  feedbackScope: 'all'|'picked' // all = green/yellow/red for all 5, picked = only your stone
   winrateHistory: number[]
   status: 'playing'|'scoring'|'finished'
   passing: number
@@ -24,6 +25,7 @@ type State = {
   setN: (n:number)=>void
   setStrategy: (s:Strategy)=>void
   setShowFeedback: (v:boolean)=>void
+  setFeedbackScope: (v:'all'|'picked')=>void
   newGame: ()=>void
   applyMove: (x:number,y:number)=>void
   pass: ()=>void
@@ -45,6 +47,7 @@ export const useGame = create<State>((set, get)=>({
   evaluations: null,
   evalsHistory: [],
   showFeedback: true,
+  feedbackScope: 'all' as const,
   winrateHistory: [],
   status: 'playing',
   passing: 0,
@@ -52,6 +55,7 @@ export const useGame = create<State>((set, get)=>({
   setN: n=> set({n}),
   setStrategy: strategy=> set({strategy}),
   setShowFeedback: showFeedback=> set({showFeedback}),
+  setFeedbackScope: (feedbackScope:'all'|'picked')=> set({feedbackScope}),
   newGame: ()=> set({board: emptyBoard(), history:[], toMove:1, candidates:null, evaluations:null, evalsHistory:[], winrateHistory:[], status:'playing', passing:0}),
   setCandidates: candidates=> set({candidates}),
   setEvaluations: evaluations=> set(s=> ({evaluations, evalsHistory: [...s.evalsHistory, evaluations]})),

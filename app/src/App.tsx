@@ -98,6 +98,11 @@ export default function App(){
 
   const last = s.history.length ? s.history[s.history.length-1] : undefined
   const lastPlayerMove = [...s.history].reverse().find(h=> h.color===1 && h.x>=0) as {x:number,y:number}|undefined
+  const filteredEvals = (()=>{
+    if(!s.showFeedback || !s.evaluations) return null
+    if(s.feedbackScope==='picked' && lastPlayerMove) return s.evaluations.filter(e=> e.x===lastPlayerMove.x && e.y===lastPlayerMove.y) as any
+    return s.evaluations as any
+  })()
   const sgf = boardToSgf(signMap, s.history.map(h=>({x:h.x,y:h.y,color:h.color})), 7)
 
   return <div style={{fontFamily:'system-ui', maxWidth:920, margin:'0 auto', padding:16}}>
@@ -121,15 +126,16 @@ export default function App(){
     {err && <div style={{color:'#b00', margin:'8px 0'}}>Server error: {err} — running in mock mode if backend down.</div>}
     {loading && <div style={{color:'#666'}}>Thinking…</div>}
 
-    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={s.showFeedback ? s.evaluations : null} lastMove={last && last.x>=0 ? [last.x, last.y] as [number,number] : undefined} feedbackMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
+    <GobanView board={displayBoard} candidates={freePlay? null : s.candidates} evaluations={filteredEvals} lastMove={last && last.x>=0 ? [last.x, last.y] as [number,number] : undefined} feedbackMove={lastPlayerMove ? [lastPlayerMove.x, lastPlayerMove.y] as [number,number] : undefined} onVertexClick={onVertexClick} />
     {!freePlay && s.candidates && !s.evaluations && <div style={{textAlign:'center', color:'#5a3e1a', marginTop:6, fontSize:13}}>Click a highlighted faint point (A–E) on the board</div>}
 
     <div style={{marginTop:12, display:'grid', gap:12}}>
-      {s.evaluations && <div style={{display:'flex', gap:8, alignItems:'center'}}>
+      {s.evaluations && <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
         <label style={{fontSize:13}}><input type="checkbox" checked={s.showFeedback} onChange={e=> s.setShowFeedback(e.target.checked)} /> Show feedback</label>
-        {s.evaluations && <button onClick={()=> s.clearEvaluations()} style={{fontSize:12, padding:'4px 8px'}}>Clear</button>}
+        <label style={{fontSize:13}}><input type="checkbox" checked={s.feedbackScope==='picked'} onChange={e=> s.setFeedbackScope(e.target.checked ? 'picked' : 'all')} /> Only my pick</label>
+        <button onClick={()=> s.clearEvaluations()} style={{fontSize:12, padding:'4px 8px'}}>Clear</button>
       </div>}
-      {s.showFeedback && <FeedbackPanel evals={s.evaluations as any} />}
+      {filteredEvals && <FeedbackPanel evals={filteredEvals} />}
       <WinrateGraph history={s.winrateHistory} />
       <div style={{fontSize:13, color:'#444'}}>
         Moves: {s.history.length} · To move: {s.toMove===1?'B':'W'} · Status: {s.status} · Score est area: {(()=>
