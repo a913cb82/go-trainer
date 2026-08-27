@@ -135,7 +135,7 @@ export class KatagoEngine {
     const humanModel = process.env.KATAGO_HUMAN_MODEL || '/home/acbraith/projects/go_game/server/models/b18c384nbt-humanv0.bin.gz'
     const args = ['analysis','-model',model,'-human-model',humanModel,'-config','/home/acbraith/projects/go_game/server/config/analysis.cfg']
     // For human SL: must set profile either in config or overrideSettings per query
-    this.proc = spawn(bin, args, {stdio:['pipe','pipe','pipe'], cwd: process.cwd(), env: {...process.env, LD_LIBRARY_PATH: (process.env.LD_LIBRARY_PATH || '') + ':/tmp/libs/usr/lib/x86_64-linux-gnu'}})
+    this.proc = spawn(bin, args, {stdio:['pipe','pipe','pipe'], cwd: process.cwd(), env: {...process.env, LD_LIBRARY_PATH: (process.env.LD_LIBRARY_PATH || '') + ':/usr/local/cuda/targets/x86_64-linux/lib:/tmp/libs/usr/lib/x86_64-linux-gnu:/home/acbraith/projects/go_game/server'}})
     this.proc.stdout?.on('data',d=> this.onData(d.toString()))
     this.proc.stderr?.on('data',d=> console.error('[katago]', d.toString().slice(0,500)))
     this.proc.on('error',()=> { this.mode='mock'; console.warn('katago spawn failed, using mock') })
