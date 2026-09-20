@@ -230,5 +230,47 @@ app.post('/evaluate', async(req, reply)=>{
   }
 })
 
+const scoreBody = z.object({
+  board: boardSchema,
+  history: historySchema,
+  maxVisits: z.number().min(1).max(2000).default(500)
+})
+app.post('/score', async(req, reply)=>{
+  const p = scoreBody.safeParse(req.body)
+  if(!p.success) return reply.code(400).send({error:p.error.flatten()})
+  const {board, maxVisits, history} = p.data as any
+  try{
+    const sign = board as number[][]
+    const pos = positionArgs(sign, history, 'B')
+    const query = {
+      id: `s-${Date.now()}`,
+      ...pos,
+      rules: 'japanese',
+      komi: 7,
+      boardXSize: 9,
+      boardYSize: 9,
+      analyzeTurns: [pos.moves.length],
+      maxVisits: maxVisits || 500,
+      includeOwnership: true,
+      includePolicy: false,
+      // Pure strong net (no HumanSL profile): measurement, not human-like play.
+      // BLACK perspective forced so positive = Black leads, komi included.
+      overrideSettings: { reportAnalysisWinratesAs: 'BLACK', ignorePreRootHistory: false }
+    }
+    const res = await engine.query(query, 30000) as any
+    const own = res?.ownership || res?.result?.ownership || []
+    const ownership = Array.isArray(own) && own.length===81
+      ? Array.from({length:9},(_,y)=> own.slice(y*9,(y+1)*9))
+      : Array.from({length:9},()=>Array(9).fill(0))
+    const root = res?.rootInfo || res?.result?.rootInfo || {}
+    const scoreLead = Number(root.scoreLead ?? root.scoreMean ?? NaN)
+    if(!Number.isFinite(scoreLead)) throw new Error('KataGo returned no scoreLead')
+    return { scoreLead, ownership }
+  } catch (e: any) {
+    console.error('Real score error:', e.message)
+    return reply.code(500).send({error: e.message})
+  }
+})
+
 const port = Number(process.env.PORT||3001)
 app.listen({port, host:'0.0.0.0'}).then(()=> console.log(`server ${port} mode=${engine.mode}`))

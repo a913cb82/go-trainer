@@ -14,7 +14,7 @@ CONFIG="$ROOT/server/config"
 LIBS="$ROOT/server/libs"
 mkdir -p "$MODELS" "$CONFIG" "$LIBS"
 
-HUMAN_MODEL="${KATAGO_HUMAN_MODEL_URL:-https://media.katagotraining.org/uploaded/networks/modelsextra/b18c384nbt-humanv0.bin.gz}"
+HUMAN_MODEL="${KATAGO_HUMAN_MODEL_URL:-https://github.com/lightvector/KataGo/releases/download/v1.15.0/b18c384nbt-humanv0.bin.gz}"
 # A genuine strong KataGo net for the "good vs tempting-bad" comparison. This is
 # the official b28c512nbt main-run net; substitute any strong kata1-* .bin.gz.
 STRONG_MODEL="${KATAGO_STRONG_MODEL_URL:-https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b28c512nbt-s13255194368-d5935380940.bin.gz}"
