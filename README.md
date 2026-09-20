@@ -1,28 +1,57 @@
 # go-trainer
 
+Practice 9x9 Go against KataGo at your rank.
+
 ![go-trainer screenshot](media/screenshot.png)
 
-## How it plays
-Play 9x9 Go vs KataGo HumanSL at chosen rank. Pick from `n` moves (some good, some bad) likely to be chosen by player at chosen rank. Optional instant feedback on selected move.
+## What it does
 
-## Setup
+Each turn shows candidate moves. You select one move. The app reveals points feedback. The opponent then replies with a human-like move.
 
-```bash
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb && sudo apt update
-sudo apt install cuda-toolkit-12-1 libcudnn8
+You play Black or White. You select rank from 30k to 9d. Rank steers the human model. It does not change the rules.
 
-cd app && npm i
-cd ../server && npm i
-cd .. && ./server/scripts/download-models.sh
-```
+The winrate graph records each move. The graph also works as a review slider. Drag the graph to review past positions. Two passes end the game. The engine then scores the board.
 
-Run (two terminals):
+## Training styles
 
-```bash
-# terminal 1
-cd server && KATAGO_MODE=real npm run dev  # :3001
-# terminal 2
-cd app && npm run dev                       # :5173 proxies /api → :3001
-curl http://localhost:3001/health
-```
+The setup sheet selects style and move count. Move count is 3, 5, or free choice. Style controls how many good and bad moves appear.
+
+- 2 Good, 3 Bad: mix of best moves and tempting errors
+- 3 Good, 2 Bad: three best moves hide two errors
+- 1 Good, 4 Bad: best move hides among bad moves
+- 4 Good, 1 Bad: find the one blunder
+- Human-like: most likely human moves at your rank
+- Strongest: strongest moves only
+
+Feedback color shows group membership. Green marks good moves. Red marks bad moves. Yellow marks middle moves in flat styles.
+
+Free choice hides style and instant feedback. It shows no candidate circles.
+
+## Install
+
+1. Connect a device with Android 14 or newer.
+2. Run `./gradlew installDebug` from the `android` folder.
+3. Open the app on the device.
+4. Tap Download on the setup screen.
+5. Wait until the status shows Ready.
+6. Tap Start game.
+
+## Engine
+
+The app runs KataGo on the device. It needs no server. It needs no network after download.
+
+Two nets share the work. The small b10 net searches moves. The b18 human net steers selection toward your rank. The b10 net ships inside the app. The app downloads the b18 net once. The download is about 99 MB.
+
+Play uses a persistent board. The bot uses 10 visits per reply. Candidates use 150 visits per query. Typical replies take under one second on warm hardware. First load takes a few seconds.
+
+Rules are Japanese area scoring with komi 7. Scoring uses engine `final_score`. The app exports games as SGF.
+
+## Project layout
+
+- `android`: the app and the on-device engine
+- `app`: web client, kept for dev only
+- `server`: PC engine, kept for dev only
+- `docs`: architecture and design notes
+- `media`: screenshots
+
+The app does not use `app` or `server` at runtime.
