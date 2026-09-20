@@ -136,3 +136,13 @@ they use it for HumanSL), preaz_ opening style (UI-only follow-up).
 HumanSL off + analysisWideRootNoise 0.20 for candidates (19 real moves @150v);
 symmetry filler filtered; winrate carry-forward in free play; remote engine and
 its permission/config deleted from the app. Gate: 65 unit tests + lint + Paparazzi.
+
+## Threshold-free selection — DONE (2026-09-20)
+Per-rank point thresholds are gone from CandidateSelector. Rank enters only
+through the b18 human net (cumulative-mass pool: shortest policy-sorted prefix
+covering 85% of the human mass, min 5). Quality is ordinal within that pool
+(lowest loss = best). Strategy shapes: good-vs-tempting 2+3, blunder-check
+4+1, tesuji 1 best (objective) + rest, human-like = top 5 by policy, strongest
+= top 5 by score. Ties break toward the more human move (stable sort); groups
+never overlap (dedup + fill). RankTest/thresholds survive only as feedback
+pill coloring.

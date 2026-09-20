@@ -1,8 +1,16 @@
 package com.gotrainer.nine.game
 
 /**
- * Pure candidate selection mirroring server/src/index.ts strategies.
- * Pool entries carry (humanPrior, strongScore); output keeps input order info via labels A-E.
+ * Pure candidate selection (shared contract with the web trainer, now
+ * threshold-free).
+ *
+ * Selection has two independent axes:
+ *  - QUALITY: score loss against the best analyzed move (points).
+ *  - HUMAN-NESS: the human net's policy at the chosen rank profile.
+ *
+ * There are no per-rank point thresholds any more. Rank enters through the
+ * human net only, via [humanPool]: the moves a player at that rank seriously
+ * considers. Quality is ordinal within that pool (lowest loss = best).
  */
 data class PoolEntry(
     val x: Int,
@@ -13,52 +21,94 @@ data class PoolEntry(
 )
 
 object CandidateSelector {
+    /** Share of the human policy mass the candidate pool must cover. */
+    private const val HUMAN_COVERAGE = 0.85
+
+    /** Floor so a best/worst split always has material in sharp positions. */
+    private const val HUMAN_POOL_MIN = 5
+
+    /**
+     * The moves a human at this rank seriously considers: the shortest prefix
+     * of the policy-sorted pool that covers [HUMAN_COVERAGE] of the total
+     * policy mass, and never fewer than [HUMAN_POOL_MIN] moves.
+     */
+    fun humanPool(byHuman: List<PoolEntry>): List<PoolEntry> {
+        if (byHuman.isEmpty()) return byHuman
+        val total = byHuman.sumOf { it.humanPolicy }
+        if (total <= 0.0) return byHuman.take(HUMAN_POOL_MIN)
+        val target = total * HUMAN_COVERAGE
+        var acc = 0.0
+        var i = 0
+        while (i < byHuman.size && (i < HUMAN_POOL_MIN || acc < target)) {
+            acc += byHuman[i].humanPolicy
+            i++
+        }
+        return byHuman.take(i)
+    }
+
+    private fun lossOf(e: PoolEntry, bestScore: Double): Double =
+        maxOf(0.0, bestScore - e.strongScore)
+
+    /**
+     * Strategy shape: (best-group slots, worst-group slots). The worst group
+     * holds the highest-loss moves in the human pool; the best group the
+     * lowest-loss. Scales with n (the app offers 0/3/5).
+     */
+    fun slots(strategy: Strategy, n: Int): Pair<Int, Int> = when (strategy) {
+        Strategy.HUMAN_ONLY -> 0 to 0
+        Strategy.STRONG_ONLY -> n to 0
+        Strategy.GOOD_VS_TEMPTING -> {
+            val best = minOf(2, maxOf(1, n - 1))
+            best to (n - best)
+        }
+        Strategy.BLUNDER_CHECK -> {
+            val worst = minOf(1, maxOf(0, n - 1))
+            (n - worst) to worst
+        }
+        Strategy.TESUJI -> 1 to maxOf(0, n - 1)
+    }
+
     fun select(
         poolByHuman: List<PoolEntry>,
         poolByScore: List<PoolEntry>,
         strategy: Strategy,
-        rank: Rank,
         n: Int,
     ): List<Candidate> {
-        val th = rank.thresholds()
-        val bestScore = poolByScore.firstOrNull()?.strongScore ?: 0.0
-        fun gapOf(e: PoolEntry) = bestScore - e.strongScore
+        val bestScore = poolByScore.maxOfOrNull { it.strongScore } ?: return emptyList()
+        val human = humanPool(poolByHuman)
+        // Stable sort: the input is policy-sorted, so equal losses keep the more
+        // human move first (ties are common at ~150 analyze visits).
+        val humanByLoss = human.sortedBy { lossOf(it, bestScore) }
+        val byLoss = poolByScore.sortedBy { lossOf(it, bestScore) }
 
-        val picked: List<PoolEntry> = when (strategy) {
-            Strategy.HUMAN_ONLY -> poolByHuman.take(n)
-            Strategy.STRONG_ONLY -> poolByScore.take(n)
+        val picked: List<Pair<PoolEntry, String>> = when (strategy) {
+            // No score at all: the five most human moves at this rank.
+            Strategy.HUMAN_ONLY -> poolByHuman.take(n).map { it to "ok" }
+
+            Strategy.STRONG_ONLY -> byLoss.take(n).map { it to "good" }
+
+            Strategy.GOOD_VS_TEMPTING, Strategy.BLUNDER_CHECK -> {
+                val (b, w) = slots(strategy, n)
+                val best = if (b > 0) humanByLoss.take(b).map { it to "good" } else emptyList()
+                val worst = if (w > 0) humanByLoss.takeLast(w).map { it to "overconcentrated" } else emptyList()
+                best + worst
+            }
+
+            // Best = objectively best (the tesuji may be rank-atypical); the
+            // rest are the worst moves a human at this rank would still play.
             Strategy.TESUJI -> {
-                val best = poolByScore.firstOrNull()
-                val bad = poolByHuman.filter { it != best && gapOf(it) >= 2.0 }.take(4)
-                (if (best != null) listOf(best) + bad else poolByHuman.take(n)).take(n)
-            }
-            Strategy.BLUNDER_CHECK -> {
-                val good = poolByHuman.filter { gapOf(it) <= th.good }.take(4)
-                val bad = poolByHuman.filter { gapOf(it) >= 5.0 }.take(1)
-                val combo = (good + bad).take(n)
-                if (combo.size < n) poolByHuman.take(n) else combo
-            }
-            Strategy.GOOD_VS_TEMPTING -> {
-                val good = poolByHuman.filter { gapOf(it) <= th.good }.take(3)
-                val bad = poolByHuman.filter { gapOf(it) >= th.bad }.take(2)
-                var combo = good + bad
-                if (combo.size < n) {
-                    val rest = poolByHuman.filter { e -> combo.none { it.x == e.x && it.y == e.y } }
-                        .take(n - combo.size)
-                    combo = combo + rest
-                }
-                combo.take(n)
+                val best = byLoss.firstOrNull()?.let { listOf(it to "good") } ?: emptyList()
+                val worst = humanByLoss.takeLast(n - 1).map { it to "overconcentrated" }
+                best + worst
             }
         }
 
-        // Dedup by coordinate, skip passes (none in PoolEntry), label A-E.
         val seen = LinkedHashSet<String>()
         val out = ArrayList<Candidate>()
-        for (e in picked) {
+        fun add(e: PoolEntry, tag: String) {
             val key = "${e.x},${e.y}"
-            if (!seen.add(key)) continue
-            val gap = maxOf(0.0, Math.round(gapOf(e) * 10) / 10.0)
-            val tag = if (gap <= th.good) "good" else if (gap >= th.bad) "overconcentrated" else "ok"
+            if (!seen.add(key)) return
+            val gap = maxOf(0.0, Math.round(lossOf(e, bestScore) * 10) / 10.0)
             out.add(
                 Candidate(
                     x = e.x, y = e.y,
@@ -71,7 +121,19 @@ object CandidateSelector {
                 )
             )
         }
-        return out
+        for ((e, t) in picked) add(e, t)
+        // Top up (tiny pools, overlap between groups) from the strategy's own
+        // ordering so the extra candidates stay in character.
+        val fill = when (strategy) {
+            Strategy.STRONG_ONLY -> byLoss
+            Strategy.TESUJI -> humanByLoss
+            else -> poolByHuman
+        }
+        for (e in fill) {
+            if (out.size >= n) break
+            add(e, "ok")
+        }
+        return out.take(n)
     }
 
     fun toEvaluated(candidates: List<Candidate>): List<EvaluatedMove> {

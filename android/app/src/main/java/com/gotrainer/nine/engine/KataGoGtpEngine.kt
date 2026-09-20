@@ -824,7 +824,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             val all = best?.moves ?: emptyList()
             val real = all.filter { !it.padded }
             val stats = if (real.size >= n) real else real + all.filter { it.padded }
-            Log.i(TAG, "candidates pool: ${real.size} real / ${all.size} total (n=$n)")
             if (stats.isEmpty()) throw IllegalStateException("KataGo analyze returned no legal moves")
             // Orientation sanity (log-only): the grid's top move must at least BE
             // one of the analyzed moves. Equality with the search's order-0 move
@@ -846,8 +845,13 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             // Pools need real scores for gap math: analyzed moves only.
             val h = stats.sortedByDescending { grid[it.move.let { m -> parsePoint(m) }] ?: it.prior }.mapNotNull { entryOf(it) }
             val s = stats.sortedByDescending { it.scoreLead }.mapNotNull { entryOf(it) }
+            Log.i(
+                TAG,
+                "candidates pool: ${real.size} real / ${all.size} total, " +
+                    "human pool ${CandidateSelector.humanPool(h).size}, n=$n",
+            )
             if (h.isEmpty()) throw IllegalStateException("KataGo analyze returned no playable moves")
-            val out = CandidateSelector.select(h, s.ifEmpty { h }, strategy, rank, n)
+            val out = CandidateSelector.select(h, s.ifEmpty { h }, strategy, n)
             Log.i(TAG, "candidates took ${System.currentTimeMillis() - t0}ms (${stats.size} moves)")
             out
         } catch (e: Exception) {
