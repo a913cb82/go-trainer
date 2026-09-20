@@ -146,3 +146,12 @@ covering 85% of the human mass, min 5). Quality is ordinal within that pool
 = top 5 by score. Ties break toward the more human move (stable sort); groups
 never overlap (dedup + fill). RankTest/thresholds survive only as feedback
 pill coloring.
+
+## Count-based styles + group colors — DONE (2026-09-20)
+Strategies are count families, no point edges: hunt (1,best)+(n-1,worst),
+split2 (2,n-2), split3 (3,n-3), blunder (n-1,1), human-like (n by policy),
+strongest (n by score). The sheet offers only non-degenerate, non-duplicate
+shapes: n=5 -> all six; n=3 -> (1,2),(2,1),human,strongest. Display names count
+the groups ("2 Good, 3 Bad"). Feedback pill colors come from GROUP membership
+(good=green, bad=red, middle=yellow for the flat styles), never from point
+cutoffs. Settings IDs unchanged, so saved styles survive the rename.

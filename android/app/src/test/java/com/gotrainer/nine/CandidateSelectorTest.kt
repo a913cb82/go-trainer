@@ -80,11 +80,11 @@ class CandidateSelectorTest {
         assertEquals(setOf(2 to 2, 0 to 0, 4 to 4), out.filter { it.tag == "overconcentrated" }.map { it.x to it.y }.toSet())
     }
 
-    @Test fun `human only ignores score loss`() {
+    @Test fun `human only ignores score loss and colors positionally`() {
         val (byH, byS) = pool()
         val out = CandidateSelector.select(byH, byS, Strategy.HUMAN_ONLY, 3)
         assertEquals(listOf(0 to 0, 1 to 1, 2 to 2), out.map { it.x to it.y })
-        assertEquals(listOf("ok", "ok", "ok"), out.map { it.tag })
+        assertEquals(listOf("good", "ok", "overconcentrated"), out.map { it.tag })
     }
 
     @Test fun `strong only takes the best scores regardless of human-ness`() {
@@ -127,6 +127,32 @@ class CandidateSelectorTest {
         val dup = listOf(PoolEntry(1, 1, 9.0, strongScore = 5.0), PoolEntry(1, 1, 8.0, strongScore = 5.0))
         val out = CandidateSelector.select(dup, dup, Strategy.HUMAN_ONLY, 2)
         assertEquals(1, out.size)
+    }
+
+    @Test fun `split 3 plus 2 takes three best and two worst`() {
+        val wide = listOf(
+            PoolEntry(0, 0, humanPolicy = 20.0, strongScore = 90.0),
+            PoolEntry(1, 1, humanPolicy = 20.0, strongScore = 100.0),
+            PoolEntry(2, 2, humanPolicy = 15.0, strongScore = 95.0),
+            PoolEntry(3, 3, humanPolicy = 15.0, strongScore = 98.0),
+            PoolEntry(4, 4, humanPolicy = 10.0, strongScore = 85.0),
+            PoolEntry(5, 5, humanPolicy = 10.0, strongScore = 99.0),
+            PoolEntry(6, 6, humanPolicy = 5.0, strongScore = 70.0),
+            PoolEntry(7, 7, humanPolicy = 5.0, strongScore = 60.0),
+        )
+        val byS = wide.sortedByDescending { it.strongScore }
+        val out = CandidateSelector.select(wide, byS, Strategy.SPLIT_3_2, 5)
+        assertEquals(5, out.size)
+        assertEquals(3, out.count { it.tag == "good" })
+        assertEquals(2, out.count { it.tag == "overconcentrated" })
+        assertEquals(
+            setOf(1 to 1, 5 to 5, 3 to 3),
+            out.filter { it.tag == "good" }.map { it.x to it.y }.toSet(),
+        )
+        assertEquals(
+            setOf(4 to 4, 0 to 0),
+            out.filter { it.tag == "overconcentrated" }.map { it.x to it.y }.toSet(),
+        )
     }
 
     @Test fun `labels are A to E in output order`() {

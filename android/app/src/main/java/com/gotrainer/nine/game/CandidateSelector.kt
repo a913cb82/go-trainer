@@ -61,6 +61,10 @@ object CandidateSelector {
             val best = minOf(2, maxOf(1, n - 1))
             best to (n - best)
         }
+        Strategy.SPLIT_3_2 -> {
+            val best = minOf(3, maxOf(1, n - 1))
+            best to (n - best)
+        }
         Strategy.BLUNDER_CHECK -> {
             val worst = minOf(1, maxOf(0, n - 1))
             (n - worst) to worst
@@ -87,7 +91,7 @@ object CandidateSelector {
 
             Strategy.STRONG_ONLY -> byLoss.take(n).map { it to "good" }
 
-            Strategy.GOOD_VS_TEMPTING, Strategy.BLUNDER_CHECK -> {
+            Strategy.GOOD_VS_TEMPTING, Strategy.BLUNDER_CHECK, Strategy.SPLIT_3_2 -> {
                 val (b, w) = slots(strategy, n)
                 val best = if (b > 0) humanByLoss.take(b).map { it to "good" } else emptyList()
                 val worst = if (w > 0) humanByLoss.takeLast(w).map { it to "overconcentrated" } else emptyList()
@@ -133,7 +137,19 @@ object CandidateSelector {
             if (out.size >= n) break
             add(e, "ok")
         }
-        return out.take(n)
+        // Flat strategies (human-like, strongest) have no best/worst groups:
+        // color them positionally — first green, last red, middle yellow.
+        val flat = strategy == Strategy.HUMAN_ONLY || strategy == Strategy.STRONG_ONLY
+        if (!flat || out.isEmpty()) return out.take(n)
+        return out.take(n).mapIndexed { i, c ->
+            c.copy(
+                tag = when {
+                    out.size == 1 || i == 0 -> "good"
+                    i == out.size - 1 -> "overconcentrated"
+                    else -> "ok"
+                }
+            )
+        }
     }
 
     fun toEvaluated(candidates: List<Candidate>): List<EvaluatedMove> {

@@ -17,13 +17,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.EvaluatedMove
-import com.gotrainer.nine.game.Rank
-import com.gotrainer.nine.game.gapColor
+import com.gotrainer.nine.game.GapStyle
 import kotlin.math.roundToInt
 
 private val WOOD = Color(0xFFE8C07A)
 private val GRID = Color(0xFF3E2B15)
 private val STARS = listOf(2 to 2, 2 to 6, 6 to 2, 6 to 6, 4 to 4)
+
+/** Feedback colors by selection GROUP: good = green, bad = red, middle = yellow. */
+internal fun tagStyle(tag: String): GapStyle = when (tag) {
+    "good" -> GapStyle("#27864a", "#c8f0c8")
+    "overconcentrated" -> GapStyle("#c0392b", "#ffcccc")
+    else -> GapStyle("#b7791f", "#fff6b0")
+}
 
 /** Pure Canvas 9x9 board: grid, hoshi, stones, candidates, feedback. Wood board in both themes. */
 @Composable
@@ -33,7 +39,6 @@ fun BoardView(
     evaluations: List<EvaluatedMove>?,
     lastMove: Pair<Int, Int>?,
     feedbackMove: Pair<Int, Int>?,
-    rank: Rank,
     onVertexClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -127,13 +132,14 @@ fun BoardView(
                 )
             }
         }
-        // feedback: picked halo + pts/win% pill
+        // feedback: picked halo + pts/win% pill, colored by the move's GROUP
+        // (good = green, bad = red, middle = yellow) — not by point cutoffs.
         if (feedbackMove != null) {
             val (lx, ly) = feedbackMove
             if (boardSignMap[ly][lx] != 0) {
                 val ev = evaluations?.firstOrNull { it.x == lx && it.y == ly }
                 if (ev != null) {
-                    val style = gapColor(ev.gap, rank)
+                    val style = tagStyle(ev.tag)
                     drawCircle(style.color, radius = cell * 0.53f, center = Offset(cx(lx), cy(ly)), style = Stroke(width = 7f))
                     pill(cx(lx), cy(ly), cell, ev.strongScore, ev.strongWinrate, style.hex, style.bg)
                 }
@@ -144,7 +150,7 @@ fun BoardView(
             for (e in evaluations) {
                 if (boardSignMap[e.y][e.x] != 0) continue
                 if (feedbackMove != null && e.x == feedbackMove.first && e.y == feedbackMove.second) continue
-                val style = gapColor(e.gap, rank)
+                val style = tagStyle(e.tag)
                 pill(cx(e.x), cy(e.y), cell, e.strongScore, e.strongWinrate, style.hex, style.bg)
             }
         }

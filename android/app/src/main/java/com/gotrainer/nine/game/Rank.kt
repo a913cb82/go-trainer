@@ -27,11 +27,59 @@ enum class Strategy(val id: String) {
     HUMAN_ONLY("human-only"),
     TESUJI("tesuji"),
     BLUNDER_CHECK("blunder-check"),
-    STRONG_ONLY("strong-only");
+    STRONG_ONLY("strong-only"),
+    SPLIT_3_2("split-3-2");
 
     companion object {
         val ALL = entries.toList()
         fun fromId(id: String): Strategy = entries.firstOrNull { it.id == id } ?: GOOD_VS_TEMPTING
+    }
+
+    /**
+     * Count-based display name, e.g. "2 Good, 3 Bad" / "5 Human-like". Side is
+     * decided by the group the move was picked from, not by point cutoffs.
+     */
+    fun label(n: Int): String = when (this) {
+        TESUJI -> "1 Good, ${n - 1} Bad"
+        GOOD_VS_TEMPTING -> "2 Good, ${n - 2} Bad"
+        SPLIT_3_2 -> "3 Good, ${n - 3} Bad"
+        BLUNDER_CHECK -> "${n - 1} Good, 1 Bad"
+        HUMAN_ONLY -> "$n Human-like"
+        STRONG_ONLY -> "$n Strongest"
+    }
+
+    fun blurb(): String = when (this) {
+        TESUJI -> "Best move hidden among bad ones"
+        GOOD_VS_TEMPTING -> "Mix of best moves and tempting mistakes"
+        SPLIT_3_2 -> "Three good moves hide two mistakes"
+        BLUNDER_CHECK -> "Spot the one blunder"
+        HUMAN_ONLY -> "Most likely human moves at your rank"
+        STRONG_ONLY -> "Strongest moves only"
+    }
+}
+
+/**
+ * Which training styles the sheet offers for n choices. Display order is
+ * fixed (hunt, splits, blunder, flat). A split family appears only when both
+ * groups are non-empty AND its (best, worst) shape isn't already offered:
+ * n=5 gives all four splits, n=3 gives (1,2) and (2,1) only.
+ */
+fun availableStrategies(n: Int): List<Strategy> {
+    if (n <= 0) return Strategy.ALL
+    val order = listOf(
+        Strategy.TESUJI,
+        Strategy.GOOD_VS_TEMPTING,
+        Strategy.SPLIT_3_2,
+        Strategy.BLUNDER_CHECK,
+        Strategy.HUMAN_ONLY,
+        Strategy.STRONG_ONLY,
+    )
+    val seen = mutableSetOf<Pair<Int, Int>>()
+    return order.filter { st ->
+        if (st == Strategy.HUMAN_ONLY || st == Strategy.STRONG_ONLY) return@filter true
+        val shape = CandidateSelector.slots(st, n)
+        if (shape.second < 1) return@filter false
+        seen.add(shape)
     }
 }
 

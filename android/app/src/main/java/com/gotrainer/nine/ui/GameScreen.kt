@@ -65,25 +65,9 @@ import com.gotrainer.nine.game.label
 import com.gotrainer.nine.game.GameViewModel
 import com.gotrainer.nine.game.GoBoard
 import com.gotrainer.nine.game.Rank
+import com.gotrainer.nine.game.availableStrategies
 import com.gotrainer.nine.game.Scoring
 import com.gotrainer.nine.game.Strategy
-
-/** Friendly names + one-line explanations for the training styles. */
-private fun strategyName(s: Strategy): String = when (s) {
-    Strategy.GOOD_VS_TEMPTING -> "Good vs tempting"
-    Strategy.HUMAN_ONLY -> "Human-like"
-    Strategy.TESUJI -> "Tesuji hunt"
-    Strategy.BLUNDER_CHECK -> "Blunder check"
-    Strategy.STRONG_ONLY -> "Strongest"
-}
-
-private fun strategyBlurb(s: Strategy): String = when (s) {
-    Strategy.GOOD_VS_TEMPTING -> "Mix of best moves and tempting mistakes"
-    Strategy.HUMAN_ONLY -> "Most likely human moves at your rank"
-    Strategy.TESUJI -> "Best move hidden among bad ones"
-    Strategy.BLUNDER_CHECK -> "Spot the one blunder"
-    Strategy.STRONG_ONLY -> "Strongest moves only"
-}
 
 private fun choicesLabel(n: Int): String = if (n == 0) "free choice" else "$n choices"
 
@@ -253,7 +237,6 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                     evaluations = boardEvals,
                     lastMove = lastMove,
                     feedbackMove = feedbackMove,
-                    rank = s.rank,
                     onVertexClick = actions.onBoardTap,
                     modifier = Modifier.padding(10.dp),
                 )
@@ -429,16 +412,19 @@ internal fun OpponentSheetContent(
         Column(modifier = Modifier.alpha(if (freeChoice) 0.45f else 1f)) {
             Text("Training style", style = MaterialTheme.typography.labelLarge)
             Column {
-                for (st in Strategy.ALL) {
+                // Count-based options adapt to n (n=3 offers four, n=5 six).
+                val options = availableStrategies(draftN)
+                val shownN = maxOf(draftN, 5)
+                for (st in options) {
                     Row(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = draftStrategy == st, onClick = { onDraftStrategy(st) }, enabled = !freeChoice)
                         Column(modifier = Modifier.padding(start = 8.dp)) {
-                            Text(strategyName(st), style = MaterialTheme.typography.bodyMedium)
+                            Text(st.label(shownN), style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                strategyBlurb(st),
+                                st.blurb(),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
