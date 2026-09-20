@@ -64,6 +64,8 @@ data class GameState(
     val playerColor: Int = 1,
     /** Engine final score (BLACK-perspective lead) once the game ends; null until scored. */
     val finalScoreLead: Double? = null,
+    /** True while the engine counts the final score (chip shows "scoring…"). */
+    val scoring: Boolean = false,
     /** Engine ownership map for future heatmaps; null until scored or unavailable. */
     val finalOwnership: List<List<Double>>? = null,
 )

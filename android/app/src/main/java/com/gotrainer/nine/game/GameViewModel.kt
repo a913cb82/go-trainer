@@ -95,6 +95,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** One-shot engine scoring after pass-pass; chip shows the local estimate meanwhile. */
     private fun requestFinalScore() {
         val eng = engine()
+        // scoring=true lets the UI show "scoring…" instead of the LOCAL estimate,
+        // which otherwise flashes a wrong number for ~0.5s before the engine's
+        // authoritative count (observed: black +6 -> black +2).
+        _state.value = _state.value.copy(scoring = true)
         viewModelScope.launch {
             try {
                 val s = _state.value
@@ -102,10 +106,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 val res: ScoreResult = eng.score(s.boardSignMap, s.history)
                 val cur = _state.value
                 if (cur.status == "finished") {
-                    _state.value = cur.copy(finalScoreLead = res.scoreLeadBlack, finalOwnership = res.ownership)
+                    _state.value = cur.copy(
+                        finalScoreLead = res.scoreLeadBlack,
+                        finalOwnership = res.ownership,
+                        scoring = false,
+                    )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "final score failed, keeping local estimate", e)
+                _state.value = _state.value.copy(scoring = false)
             }
         }
     }
@@ -118,7 +127,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 history = emptyList(), toMove = 1, playerColor = playerColor,
                 candidates = null, evaluations = null,
                 pastCandidates = emptyMap(), pastEvals = emptyMap(),
-                finalScoreLead = null, finalOwnership = null,
+                finalScoreLead = null, finalOwnership = null, scoring = false,
                 winrateHistory = emptyList(), status = "playing", passing = 0,
                 isThinking = false, error = null, reviewIdx = null,
             )
@@ -230,7 +239,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 history = hist.toList(), toMove = s.playerColor, candidates = null, evaluations = null,
                 pastCandidates = s.pastCandidates.filterKeys { it < lastPlayerIdx },
                 pastEvals = s.pastEvals.filterKeys { it < lastPlayerIdx },
-                finalScoreLead = null, finalOwnership = null,
+                finalScoreLead = null, finalOwnership = null, scoring = false,
                 status = "playing", passing = 0,
                 winrateHistory = s.winrateHistory.dropLast(undone),
                 reviewIdx = null,

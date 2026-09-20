@@ -95,10 +95,16 @@ fun BoardView(
                 drawCircle(Color(0xFF8A7040), radius = cell * 0.44f, center = c, style = Stroke(width = 2f))
             }
         }
-        // last-move ring
+        // last-move ring — skipped ONLY when a feedback halo is actually drawn at
+        // that point (the halo is what would collide). In free-choice review the
+        // feedback list is empty, so the ring must still show on the player's
+        // own (black) stone: the old coordinate-only check hid it there.
+        val feedbackHasHalo = feedbackMove != null &&
+            boardSignMap[feedbackMove.second][feedbackMove.first] != 0 &&
+            evaluations?.any { it.x == feedbackMove.first && it.y == feedbackMove.second } == true
         if (lastMove != null) {
             val (lx, ly) = lastMove
-            if (boardSignMap[ly][lx] != 0 && (feedbackMove == null || lx != feedbackMove.first || ly != feedbackMove.second)) {
+            if (boardSignMap[ly][lx] != 0 && !(feedbackHasHalo && lx == feedbackMove!!.first && ly == feedbackMove.second)) {
                 val v = boardSignMap[ly][lx]
                 drawCircle(
                     if (v == 1) Color.White else Color.Black,

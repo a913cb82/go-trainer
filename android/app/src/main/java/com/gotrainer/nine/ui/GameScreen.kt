@@ -38,7 +38,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -200,8 +199,9 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
 
     val statusText = when {
         rIdx != null -> "Reviewing move $rIdx of ${s.history.size}"
-        // Engine score once scored (KataGo resolves life/death itself); local area
-        // estimate meanwhile so the chip never sits empty.
+        // Never flash the local estimate as if it were the result: count first,
+        // then show the engine's authoritative score (local only if scoring fails).
+        s.status == "finished" && s.scoring -> "Game over · scoring…"
         s.status == "finished" -> "Game over · " + Scoring.formatLead(s.finalScoreLead ?: Scoring.estimate(reviewBoard).diff)
         s.isThinking -> "${if (s.toMove == 1) "Black" else "White"} thinking…"
         s.toMove == 1 -> "Black to play"
@@ -264,15 +264,6 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 )
             }
 
-            // Current setup, info only — the ↻ icon above opens the New game sheet.
-            Text(
-                if (s.n == 0) "Opponent · ${s.rank.id} · free choice"
-                else "Opponent · ${s.rank.id} · ${s.n} moves · ${strategyName(s.strategy)}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-
             // Feedback scope — only while playing with feedback to scope.
             if (s.status == "playing" && s.evaluations != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -286,25 +277,6 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                         enabled = s.showFeedback,
                         onClick = { actions.onScopeAll(!s.feedbackScopeAll) },
                         label = { Text("Only my move") },
-                    )
-                }
-            }
-
-            if (s.history.isNotEmpty()) {
-                Column(modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
-                    Text(
-                        "Review",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Slider(
-                        value = (s.reviewIdx ?: s.history.size).toFloat(),
-                        onValueChange = { v ->
-                            val i = v.toInt()
-                            actions.onReview(if (i >= s.history.size) null else i)
-                        },
-                        valueRange = 0f..s.history.size.coerceAtLeast(1).toFloat(),
-                        steps = 0,
                     )
                 }
             }
@@ -323,14 +295,22 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                                 contentDescription = if (graphOpen) "Collapse" else "Expand",
                             )
                         }
-                        val lastW = s.winrateHistory.lastOrNull()
-                        Text(
-                            if (lastW != null) "${(lastW * 100).toInt()}%" else "—",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        // Percentage is part of the expanded view only.
+                        if (graphOpen) {
+                            val shownW = if (rIdx != null) {
+                                s.winrateHistory.getOrNull(rIdx - 1)
+                            } else {
+                                s.winrateHistory.lastOrNull()
+                            }
+                            Text(
+                                if (shownW != null) "${(shownW * 100).toInt()}%" else "—",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
-                    if (graphOpen) WinrateGraph(s.winrateHistory)
+                    // The graph IS the review scrubber (drag horizontally).
+                    if (graphOpen) WinrateGraph(s.winrateHistory, reviewIdx = rIdx, onReview = actions.onReview)
                 }
             }
         }
