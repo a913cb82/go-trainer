@@ -24,7 +24,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,7 +48,6 @@ fun SetupScreen(
     onDownload: () -> Unit,
     onRetry: () -> Unit,
     onRecheck: () -> Unit,
-    onUseRemote: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -79,38 +77,10 @@ fun SetupScreen(
                 Text("Checking engine files…", style = MaterialTheme.typography.bodyMedium)
             }
             is SetupViewModel.Ui.Missing -> {
-                var showRemote by remember { mutableStateOf(false) }
-                var remoteUrl by remember { mutableStateOf(ui.serverUrl) }
                 FileList(rows = ui.rows)
                 Button(onClick = onDownload, modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
                     Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                     Text("Download engine files")
-                }
-                if (!showRemote) {
-                    OutlinedButton(onClick = { showRemote = true }) {
-                        Text("Or play via home server")
-                    }
-                } else {
-                    ElevatedCard(modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                "Run the home server (server/npm run dev) and expose it " +
-                                    "via adb reverse or LAN, then connect:",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            OutlinedTextField(
-                                value = remoteUrl,
-                                onValueChange = { remoteUrl = it },
-                                label = { Text("Server URL") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                            )
-                            Button(onClick = { onUseRemote(remoteUrl) }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Connect")
-                            }
-                        }
-                    }
                 }
                 OutlinedButton(onClick = onRecheck) {
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))

@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.gotrainer.nine.data.SettingsRepository
 import com.gotrainer.nine.engine.GoEngine
 import com.gotrainer.nine.engine.KataGoGtpEngine
-import com.gotrainer.nine.engine.RemoteEngine
 import com.gotrainer.nine.engine.ScoreResult
 import kotlin.random.Random
 import kotlinx.coroutines.Job
@@ -43,11 +42,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(
                 rank = s.rank, n = s.n, colorChoice = s.colorChoice,
                 playerColor = resolveColor(s.colorChoice),
-                engineMode = s.engineMode, serverUrl = s.serverUrl,
                 strategy = s.strategy, showFeedback = s.showFeedback,
             )
             // On-device mode needs the staged binary; remote mode needs nothing local.
-            if (s.engineMode == EngineMode.DEVICE && !katago.binaryPresent()) {
+            if (!katago.binaryPresent()) {
                 _state.value = _state.value.copy(
                     error = "KataGo engine not found — push libkatago.so, models and gtp.cfg to the app filesDir",
                 )
@@ -55,11 +53,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
             // Pre-warm the on-device engine while the UI renders; the first query
             // shares the same start mutex, so exactly one engine spawns.
-            // Remote mode needs nothing local — don't touch the binary.
-            if (s.engineMode != EngineMode.DEVICE) {
-                requestCandidates()
-                return@launch
-            }
             viewModelScope.launch {
                 try {
                     katago.ensureStarted()
@@ -71,10 +64,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun engine(): GoEngine {
-        val s = _state.value
-        return if (s.engineMode == EngineMode.REMOTE) RemoteEngine(s.serverUrl) else katago
-    }
+    /** The on-device GTP engine is the only engine — no remote, no mocks. */
+    private fun engine(): GoEngine = katago
 
     private fun resolveColor(choice: ColorChoice): Int = when (choice) {
         ColorChoice.BLACK -> 1
@@ -155,25 +146,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         rank: Rank,
         n: Int,
         color: ColorChoice,
-        engineMode: EngineMode,
-        serverUrl: String,
         strategy: Strategy,
         feedback: Boolean,
     ) {
         val moves = if (n == 0 || n == 3 || n == 5) n else 5
-        val url = serverUrl.trim().trimEnd('/').ifEmpty { RemoteEngine.DEFAULT_URL }
         viewModelScope.launch {
             settings.setRank(rank)
             settings.setN(moves)
             settings.setColorChoice(color)
-            settings.setEngineMode(engineMode)
-            settings.setServerUrl(url)
             settings.setStrategy(strategy)
             settings.setShowFeedback(feedback)
         }
         _state.value = _state.value.copy(
             rank = rank, n = moves, colorChoice = color,
-            engineMode = engineMode, serverUrl = url,
             strategy = strategy, showFeedback = feedback,
         )
         newGame()
@@ -306,7 +291,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val evals = if (was != null && s.n != 0) CandidateSelector.toEvaluated(was) else s.evaluations
         val hist = s.history + MoveRec(x, y, s.playerColor, picked, null)
         // Candidates are stored in human-perspective winrate (converted at fetch).
-        val win = (picked?.strongWinrate) ?: 0.5
+        // Free play has no evaluation for the player's move: carry the last known
+        // value forward instead of inventing 50%, then the bot's reply appraisal
+        // replaces it (a fabricated 0.5 made the graph read 50% on every black move).
+        val win = picked?.strongWinrate ?: (s.winrateHistory.lastOrNull() ?: 0.5)
         val pastEvals = if (evals != null && s.n != 0) s.pastEvals + (s.history.size to evals) else s.pastEvals
         _state.value = syncBoard(
             s.copy(

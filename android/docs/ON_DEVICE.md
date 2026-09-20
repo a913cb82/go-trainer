@@ -218,3 +218,30 @@ blank line. The raw-nn collector treated that stray blank as its own payload's
 end -> "0 bytes in 7ms", then "no policy grid". Fix: while collecting a raw
 multi-line response, IGNORE blank lines while the buffer is empty. Also drain
 `responses` after collectAnalyze so the next command can't eat the stale header.
+
+## Candidate breadth: the "only 3 choices" regression (2026-09-20)
+Root cause: HumanSL's play params focus the search — measured on-device, even
+after 1236 root visits only **4 DISTINCT root moves** had visits; KataGo pads
+thin analyze reports with symmetry duplicates ("isSymmetryOf"), which are not
+real candidates. The old 3-move pools starved the selector down to 3 pills.
+Fix (mirrors BadukAI, which disables HumanSL for its analysis panel):
+- fetch the raw human policy FIRST (needs the profile armed),
+- then `kata-set-param humanSLProfile _` + BadukAI's DEACTIVATED param column
+  + `analysisWideRootNoise = 0.20` (KataGo's documented breadth knob),
+- collect to ~150 visits -> **19 distinct scored moves** measured mid-game
+  (empty board ~6), candidates query ~0.8s,
+- restore the play profile; symmetry-padded filler is filtered (kept only as
+  a fallback if the real pool is somehow smaller than n).
+Logs "candidates pool: X real / Y total" every fetch.
+
+## Winrate graph: no fake 50% (2026-09-20)
+Free play had no evaluation for the player's move, so applyPlayerMove appended
+a fabricated 0.5 -> the graph read 50% after every black move, then jumped to
+the real value after white's reply. Now it CARRIES FORWARD the last known
+value and the bot's reply appraisal (rootInfo of the pre-reply search) updates
+it. Verified on-device: 23% shown while white thought.
+
+## Remote engine removed (2026-09-20)
+The Engine selector, server URL, RemoteEngine, INTERNET permission and the
+cleartext-localhost network config are gone. On-device GTP is the only engine.
+The PC `server/` remains as a dev tool, unreferenced by the app.

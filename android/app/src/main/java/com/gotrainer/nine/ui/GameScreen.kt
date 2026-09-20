@@ -20,6 +20,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -32,7 +33,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -59,7 +59,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
-import com.gotrainer.nine.game.EngineMode
 import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.label
@@ -97,8 +96,8 @@ data class GameActions(
     val onShowFeedback: (Boolean) -> Unit = {},
     val onScopeAll: (Boolean) -> Unit = {},
     val onReview: (Int?) -> Unit = {},
-    val onApplySetup: (Rank, Int, ColorChoice, EngineMode, String, Strategy, Boolean) -> Unit =
-        { _, _, _, _, _, _, _ -> },
+    val onApplySetup: (Rank, Int, ColorChoice, Strategy, Boolean) -> Unit =
+        { _, _, _, _, _ -> },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -140,16 +139,12 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     var draftRank by remember { mutableStateOf(s.rank) }
     var draftN by remember { mutableStateOf(s.n) }
     var draftColor by remember { mutableStateOf(s.colorChoice) }
-    var draftEngine by remember { mutableStateOf(s.engineMode) }
-    var draftUrl by remember { mutableStateOf(s.serverUrl) }
     var draftStrategy by remember { mutableStateOf(s.strategy) }
     var draftFeedback by remember { mutableStateOf(s.showFeedback) }
     fun openSetup() {
         draftRank = s.rank
         draftN = s.n
         draftColor = s.colorChoice
-        draftEngine = s.engineMode
-        draftUrl = s.serverUrl
         draftStrategy = s.strategy
         draftFeedback = s.showFeedback
         sheetOpen = true
@@ -326,16 +321,12 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 onDraftN = { draftN = it },
                 draftColor = draftColor,
                 onDraftColor = { draftColor = it },
-                draftEngine = draftEngine,
-                onDraftEngine = { draftEngine = it },
-                draftUrl = draftUrl,
-                onDraftUrl = { draftUrl = it },
                 draftStrategy = draftStrategy,
                 onDraftStrategy = { draftStrategy = it },
                 draftFeedback = draftFeedback,
                 onDraftFeedback = { draftFeedback = it },
                 onStart = {
-                    actions.onApplySetup(draftRank, draftN, draftColor, draftEngine, draftUrl, draftStrategy, draftFeedback)
+                    actions.onApplySetup(draftRank, draftN, draftColor, draftStrategy, draftFeedback)
                     sheetOpen = false
                 },
             )
@@ -353,10 +344,6 @@ internal fun OpponentSheetContent(
     onDraftN: (Int) -> Unit,
     draftColor: ColorChoice,
     onDraftColor: (ColorChoice) -> Unit,
-    draftEngine: EngineMode,
-    onDraftEngine: (EngineMode) -> Unit,
-    draftUrl: String,
-    onDraftUrl: (String) -> Unit,
     draftStrategy: Strategy,
     onDraftStrategy: (Strategy) -> Unit,
     draftFeedback: Boolean,
@@ -397,34 +384,6 @@ internal fun OpponentSheetContent(
                     label = { Text(c.label()) },
                 )
             }
-        }
-
-        Text("Engine", style = MaterialTheme.typography.labelLarge)
-        SingleChoiceSegmentedButtonRow {
-            EngineMode.ALL.forEachIndexed { i, m ->
-                SegmentedButton(
-                    selected = draftEngine == m,
-                    onClick = { onDraftEngine(m) },
-                    shape = SegmentedButtonDefaults.itemShape(i, EngineMode.ALL.size),
-                    label = { Text(m.label()) },
-                )
-            }
-        }
-        if (draftEngine == EngineMode.REMOTE) {
-            OutlinedTextField(
-                value = draftUrl,
-                onValueChange = onDraftUrl,
-                label = { Text("Server URL") },
-                supportingText = { Text("Phone reaches it via adb reverse or LAN") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-        } else {
-            Text(
-                "Runs KataGo on this phone — needs the downloaded engine files.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         ExposedDropdownMenuBox(expanded = rankOpen, onExpandedChange = { rankOpen = it }) {

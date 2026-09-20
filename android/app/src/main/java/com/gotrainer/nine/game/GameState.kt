@@ -57,9 +57,6 @@ data class GameState(
     /** Who the human plays (resolved per game into playerColor). */
     val colorChoice: ColorChoice = ColorChoice.BLACK,
     /** On-device KataGo vs the home server (adb reverse / LAN). */
-    val engineMode: EngineMode = EngineMode.REMOTE,
-    /** Remote engine base URL (e.g. http://127.0.0.1:3001 via adb reverse). */
-    val serverUrl: String = "http://127.0.0.1:3001",
     /** Resolved side for the current game: 1 = you are Black, -1 = you are White. */
     val playerColor: Int = 1,
     /** Engine final score (BLACK-perspective lead) once the game ends; null until scored. */

@@ -11,9 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** One-time engine setup gate: the game cannot run until KataGo's files are on device. */
 class SetupViewModel(app: Application) : AndroidViewModel(app) {
@@ -25,11 +23,10 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
     private val manager = ModelManager(appContext.filesDir)
     private val katago = KataGoGtpEngine(appContext)
     private var job: Job? = null
-    private val settings = com.gotrainer.nine.data.SettingsRepository(appContext)
 
     sealed interface Ui {
         data object Checking : Ui
-        data class Missing(val rows: List<ModelManager.FileRow>, val serverUrl: String) : Ui
+        data class Missing(val rows: List<ModelManager.FileRow>) : Ui
         data class Downloading(
             val fileIndex: Int,
             val fileCount: Int,
@@ -66,39 +63,7 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
             if (rows.all { it.present }) {
                 _ui.value = Ui.Ready
             } else {
-                val s = settings.settings.first()
-                _ui.value = Ui.Missing(rows, s.serverUrl)
-            }
-        }
-    }
-
-    /**
-     * Skip the downloads and play via the home server instead (adb reverse or
-     * LAN). Probes /health first — loud on failure, no silent fallback.
-     */
-    fun useRemote(url: String) {
-        job?.cancel()
-        job = viewModelScope.launch {
-            _ui.value = Ui.Checking
-            val clean = url.trim().trimEnd('/').ifEmpty { "http://127.0.0.1:3001" }
-            try {
-                val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val conn = java.net.URL("$clean/health").openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 8000
-                    conn.readTimeout = 8000
-                    try {
-                        conn.responseCode in 200..299
-                    } finally {
-                        conn.disconnect()
-                    }
-                }
-                if (!ok) throw java.io.IOException("server unhealthy")
-                settings.setEngineMode(com.gotrainer.nine.game.EngineMode.REMOTE)
-                settings.setServerUrl(clean)
-                _ui.value = Ui.Ready
-            } catch (e: Exception) {
-                Log.e(TAG, "remote probe failed", e)
-                _ui.value = Ui.Failed("Server unreachable at $clean — start it (server/npm run dev) and check adb reverse / LAN", "Retry")
+                _ui.value = Ui.Missing(rows)
             }
         }
     }

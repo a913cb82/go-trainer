@@ -30,7 +30,6 @@ class MainActivity : ComponentActivity() {
                         onDownload = setupVm::startDownload,
                         onRetry = setupVm::startDownload,
                         onRecheck = setupVm::recheck,
-                        onUseRemote = setupVm::useRemote,
                     )
                 }
             }

@@ -84,8 +84,39 @@ class KataGoGtpEngineTest {
         assertEquals(-2.1, m.scoreLead, 1e-9)
         assertEquals(0.19, m.prior, 1e-9)
         assertEquals(0, m.order)
+        assertEquals(false, m.padded)
         assertEquals(10, rep.root!!.visits)
         assertEquals(0.46, rep.root.winrate, 1e-9)
+    }
+
+    /**
+     * KataGo pads thin reports with symmetry duplicates (`isSymmetryOf`), which
+     * are NOT distinct candidates: a user seeing 3 real moves got 3 pills, and
+     * the filler must not be mistaken for real alternatives.
+     */
+    @Test fun `symmetry-padded filler is flagged not dropped`() {
+        val line = "info move F5 visits 806 winrate 0.37 scoreLead -0.78 prior 0.19 order 0 pv F5 " +
+            "isSymmetryOf E5 info move E5 visits 7 winrate 0.26 scoreLead -1.31 prior 0.03 order 1 pv E5 " +
+            "rootInfo visits 813 winrate 0.37 scoreLead -0.78"
+        val rep = KataGoGtpEngine.parseAnalyzeLine(line)
+        assertEquals(2, rep.moves.size)
+        assertEquals(true, rep.moves[0].padded)
+        assertEquals(false, rep.moves[1].padded)
+    }
+
+    /**
+     * Candidate breadth fix: analysis runs with HumanSL OFF + wide root noise
+     * (HumanSL's focused params left only ~4 visited root moves, starving the
+     * 5-choice pool). Mirrors BadukAI, which disables HumanSL for its panel.
+     */
+    @Test fun `analysis params disable humanSL and widen the root`() {
+        val p = KataGoGtpEngine.humanSlParamsOff()
+        assertEquals("0.20", p["analysisWideRootNoise"])
+        assertEquals("150", p["maxVisits"])
+        assertEquals("true", p["useNoisePruning"])
+        assertEquals("0.3", p["dynamicScoreUtilityFactor"])
+        // The humanSL-specific knobs must NOT be present when off.
+        assertEquals(false, p.keys.any { it.startsWith("humanSL") })
     }
 
     @Test fun `raw human policy grid maps points`() {

@@ -52,9 +52,15 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         private const val GENMOVE_TIMEOUT_MS = 30_000L
         private const val ANALYZE_TIMEOUT_MS = 20_000L
         private const val SCORE_TIMEOUT_MS = 15_000L
-        /** BadukAI HumanSL play budget: 10 visits/move, 25 for analysis. */
+        /** BadukAI HumanSL play budget: 10 visits/move; analysis needs much more. */
         private const val PLAY_VISITS = 10
-        private const val ANALYZE_VISITS = 25
+        // 150 visits with wide-root-noise reliably yields 10-19 DISTINCT root moves
+        // (measured); at 25-60 visits the search funnels ~99% of visits into 1-4
+        // moves, which starved the candidate pool down to 3 pills (user report).
+        private const val ANALYZE_VISITS = 150
+        // KataGo's documented knob for analysis breadth: explore the top moves less
+        // deeply but give evaluations to a greater variety of moves.
+        private const val WIDE_ROOT_NOISE = "0.20"
         /**
          * Bundled b10 SEARCH net. Asset name MUST NOT end in ".gz": aapt2
          * silently decompresses .gz assets and STRIPS the extension during
@@ -90,9 +96,34 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         private const val GATE_CWD = "/data/data"
 
         /**
+         * BadukAI's HUMAN_SL_PARAMS, DEACTIVATED column (lzwrapper.py) plus wide
+         * root noise: used for ANALYSIS only. BadukAI turns HumanSL off before its
+         * analysis panel; we do the same for candidates, because HumanSL's focused
+         * search params collapse the root to a handful of visited moves, and the
+         * candidate selector needs a broad, scored move pool.
+         */
+        fun humanSlParamsOff(): Map<String, String> = mapOf(
+            "analysisIgnorePreRootHistory" to "true",
+            "rootNumSymmetriesToSample" to "1",
+            "useLcbForSelection" to "true",
+            "staticScoreUtilityFactor" to "0.1",
+            "dynamicScoreUtilityFactor" to "0.3",
+            "useUncertainty" to "true",
+            "subtreeValueBiasFactor" to "0.45",
+            "useNoisePruning" to "true",
+            "chosenMoveTemperatureEarly" to "0.5",
+            "chosenMoveTemperature" to "0.1",
+            "chosenMoveTemperatureHalflife" to "19",
+            "chosenMoveTemperatureOnlyBelowProb" to "1.0",
+            "chosenMovePrune" to "1",
+            "analysisWideRootNoise" to WIDE_ROOT_NOISE,
+            "maxVisits" to ANALYZE_VISITS.toString(),
+        )
+
+        /**
          * BadukAI's HUMAN_SL_PARAMS, activated column (lzwrapper.py). Sent via
          * kata-set-params when HumanSL play is (re)armed. maxVisits here is the
-         * PLAY budget; candidates temporarily raise it (see analyzeCandidates).
+         * PLAY budget; analysis uses humanSlParamsOff() at a wider budget.
          */
         fun humanSlParams(): Map<String, String> = mapOf(
             "analysisIgnorePreRootHistory" to "false",
@@ -196,6 +227,8 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             val scoreLead: Double,
             val prior: Double,
             val order: Int,
+            /** Symmetry-padded filler ("isSymmetryOf") — not a real distinct move. */
+            val padded: Boolean = false,
         )
         data class RootStat(val visits: Int, val winrate: Double, val scoreLead: Double)
         data class AnalyzeReport(val moves: List<MoveStat>, val root: RootStat?)
@@ -225,6 +258,7 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                                 scoreLead = valOf("scoreLead")?.toDoubleOrNull() ?: 0.0,
                                 prior = valOf("prior")?.toDoubleOrNull() ?: 0.0,
                                 order = valOf("order")?.toIntOrNull() ?: 999,
+                                padded = t.contains("isSymmetryOf"),
                             )
                         )
                     }
@@ -607,6 +641,17 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         command("kata-set-params $params")
     }
 
+    /**
+     * Analysis mode for candidates: HumanSL OFF (profile `_`) + unbiased params
+     * + wide root noise. The raw human policy is fetched BEFORE this (it needs
+     * the profile armed). BadukAI does the same before its analysis panel.
+     */
+    private suspend fun armAnalysisMode() {
+        command("kata-set-param humanSLProfile _")
+        val params = JSONObject(humanSlParamsOff().toMap()).toString()
+        command("kata-set-params $params")
+    }
+
     /** Reconcile the persistent board with our history (prefix-aware, self-healing). */
     private suspend fun syncTo(history: List<MoveRec>) {
         ensureStarted()
@@ -755,11 +800,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             responses.clear() // drop stales from cancelled ops (see engineMutex)
             syncTo(history)
             setProfile(rank)
-            // Analysis budget (BadukAI's panel uses 25): richer than the 10-visit
-            // play budget, still ~1-2s on Eigen.
-            command("kata-set-param maxVisits $ANALYZE_VISITS")
-            val color = if (toMove == 1) "B" else "W"
-            val best = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
             // Human priors from the human net (profile-aware): the TRUE
             // humanlikeness signal. Falls back to search prior loudly-logged.
             // v1.16 raw-human-nn takes ONLY the symmetry (no color arg;
@@ -773,9 +813,18 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                 Log.e(TAG, "raw human policy failed, falling back to search prior", e)
                 emptyMap()
             }
-            // Terminator doubles as budget restore for the play path.
-            command("kata-set-param maxVisits $PLAY_VISITS")
-            val stats = best?.moves ?: emptyList()
+            // Broad, scored analysis (HumanSL off + wide root noise), then restore
+            // the play profile for the next bot reply.
+            armAnalysisMode()
+            val color = if (toMove == 1) "B" else "W"
+            val best = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
+            setProfile(rank)
+            // Symmetry-padded filler (minmoves/getAnalysisData) is not a real
+            // distinct candidate; keep it only if the real pool is too small.
+            val all = best?.moves ?: emptyList()
+            val real = all.filter { !it.padded }
+            val stats = if (real.size >= n) real else real + all.filter { it.padded }
+            Log.i(TAG, "candidates pool: ${real.size} real / ${all.size} total (n=$n)")
             if (stats.isEmpty()) throw IllegalStateException("KataGo analyze returned no legal moves")
             // Orientation sanity (log-only): the grid's top move must at least BE
             // one of the analyzed moves. Equality with the search's order-0 move
@@ -870,10 +919,11 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             responses.clear()
             syncTo(history)
             setProfile(rank)
-            command("kata-set-param maxVisits $ANALYZE_VISITS")
+            armAnalysisMode()
+            armAnalysisMode()
             val color = if (toMove == 1) "B" else "W"
             val best = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
-            command("kata-set-param maxVisits $PLAY_VISITS")
+            setProfile(rank)
             val root = best?.root
             Evaluation(root?.winrate ?: 0.5, root?.scoreLead ?: 0.0)
         } catch (e: Exception) {

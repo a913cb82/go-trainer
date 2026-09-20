@@ -104,7 +104,7 @@ class GameScreenshots {
     fun s02_opponent_sheet() {
         snap("02_opponent_sheet") {
             Surface {
-                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftN = 5, onDraftN = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftEngine = com.gotrainer.nine.game.EngineMode.REMOTE, onDraftEngine = {}, draftUrl = "http://127.0.0.1:3001", onDraftUrl = {}, draftStrategy = Strategy.GOOD_VS_TEMPTING, onDraftStrategy = {}, draftFeedback = true, onDraftFeedback = {}, onStart = {})
+                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftN = 5, onDraftN = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftStrategy = Strategy.GOOD_VS_TEMPTING, onDraftStrategy = {}, draftFeedback = true, onDraftFeedback = {}, onStart = {})
             }
         }
     }
@@ -202,7 +202,6 @@ class SetupScreenshots {
                     listOf(
                         com.gotrainer.nine.engine.ModelManager.FileRow(com.gotrainer.nine.engine.ModelManager.HUMAN, false, 0L),
                     ),
-                    serverUrl = "http://127.0.0.1:3001",
                 ),
                 onDownload = {},
                 onRetry = {},
@@ -261,8 +260,7 @@ class GameScreenshotsDark {
                     draftRank = Rank.R3D, onDraftRank = {},
                     draftN = 0, onDraftN = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
-                    draftEngine = com.gotrainer.nine.game.EngineMode.DEVICE, onDraftEngine = {},
-                    draftUrl = "http://127.0.0.1:3001", onDraftUrl = {},
+
                     draftStrategy = Strategy.STRONG_ONLY, onDraftStrategy = {},
                     draftFeedback = false, onDraftFeedback = {},
                     onStart = {},

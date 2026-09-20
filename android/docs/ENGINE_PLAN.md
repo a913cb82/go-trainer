@@ -131,3 +131,8 @@ recipe; bot replies 483ms vs their ~1s class. Rev v6. b28 strong net deleted
 from the device (obsolete since the GTP cutover; nothing used it).
 Remaining BadukAI deltas: pondering (off there too), .dlc/NPU (no evidence
 they use it for HumanSL), preaz_ opening style (UI-only follow-up).
+
+## Candidate breadth + remote removal — DONE (2026-09-20)
+HumanSL off + analysisWideRootNoise 0.20 for candidates (19 real moves @150v);
+symmetry filler filtered; winrate carry-forward in free play; remote engine and
+its permission/config deleted from the app. Gate: 65 unit tests + lint + Paparazzi.
