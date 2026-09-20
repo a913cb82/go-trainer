@@ -409,7 +409,9 @@ internal fun OpponentSheetContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        Column(modifier = Modifier.alpha(if (freeChoice) 0.45f else 1f)) {
+        // Training style and instant feedback only exist when the game offers
+        // candidate moves; in free choice they disappear instead of greying out.
+        if (!freeChoice) Column {
             Text("Training style", style = MaterialTheme.typography.labelLarge)
             Column {
                 // Count-based options adapt to n (n=3 offers four, n=5 six).
@@ -434,8 +436,8 @@ internal fun OpponentSheetContent(
             }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.weight(1f).alpha(if (freeChoice) 0.45f else 1f)) {
+        if (!freeChoice) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Instant feedback", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "Show points lost after each pick",
@@ -443,7 +445,7 @@ internal fun OpponentSheetContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = draftFeedback && !freeChoice, onCheckedChange = onDraftFeedback, enabled = !freeChoice)
+            Switch(checked = draftFeedback, onCheckedChange = onDraftFeedback)
         }
 
         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
