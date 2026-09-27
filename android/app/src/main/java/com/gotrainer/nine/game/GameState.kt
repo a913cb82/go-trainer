@@ -76,8 +76,6 @@ data class GameState(
     val difficulty: Difficulty = Difficulty.FIXED,
     /** Automatch target winrate percent (10-90). */
     val targetWinrate: Int = 50,
-    /** Automatch's honest prediction for the picked rung; null unless automatch. */
-    val predictedWinrate: Double? = null,
     /** Live player rank, e.g. "30k? ±12". */
     val playerRankText: String = "30k? ±12",
 ) {

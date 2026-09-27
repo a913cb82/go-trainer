@@ -67,11 +67,7 @@ internal fun headerSubtitle(s: GameState): String {
     val total = s.choiceCount
     val base = if (!s.multipleChoice || total == 0) s.rank.id
     else if (total == 1) "${s.rank.id} · 1 choice" else "${s.rank.id} · $total choices"
-    // Automatch shows its honest prediction for the picked rung.
-    val pred = if (s.difficulty == Difficulty.AUTOMATCH) {
-        s.predictedWinrate?.let { " · ~${(it * 100).roundToInt()}%" }
-    } else null
-    return base + (pred ?: "")
+    return base
 }
 
 /** Callbacks so the pure content below is screenshot-friendly (no ViewModel). */

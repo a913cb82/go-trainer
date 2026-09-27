@@ -142,17 +142,20 @@ private fun RatingGraph(
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = onSurface)
     val dateFmt = remember { SimpleDateFormat("M/d", Locale.US) }
-    val ranks = traj.map { BotRatings.ratingToRank(it.rating) }
+    // Game 0 is the 30k start every trajectory climbs from; the band covers
+    // played games only (the start's ±12 ranks would flatten the axis).
+    val display = remember(traj) { listOf(PlayerRating.START) + traj }
+    val ranks = display.map { BotRatings.ratingToRank(it.rating) }
     val uppers = traj.map { BotRatings.ratingToRank(it.rating + it.rd) }
-    val lowers = traj.map { (BotRatings.ratingToRank(it.rating - it.rd)) }
+    val lowers = traj.map { BotRatings.ratingToRank(it.rating - it.rd) }
     val ticks = remember(ranks) { rankAxisTicks(lowers.min(), uppers.max()) }
     val xVals: List<Float> = remember(history, xMode) {
-        if (xMode == StatsX.GAMES || history.size < 2) {
-            history.indices.map { if (history.size < 2) 0.5f else it.toFloat() / (history.size - 1) }
+        if (xMode == StatsX.GAMES) {
+            display.indices.map { it.toFloat() / history.size }
         } else {
             val t0 = history.first().ts.toDouble()
             val span = (history.last().ts - history.first().ts).toDouble().takeIf { it > 0 } ?: 1.0
-            history.map { ((it.ts - t0) / span).toFloat() }
+            listOf(0f) + history.map { ((it.ts - t0) / span).toFloat() }
         }
     }
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)) {
@@ -164,10 +167,13 @@ private fun RatingGraph(
         val hi = ticks.last().toFloat().takeIf { it > lo } ?: (lo + 1)
         fun yOf(rank: Double): Float = h - ((rank.coerceIn(lo.toDouble(), hi.toDouble()) - lo) / (hi - lo)).toFloat() * h
         fun xOf(t: Float): Float = left + t * w
-        // Uncertainty band.
+        // Uncertainty band over played games (game i plots at xVals[i + 1]).
         val band = Path().apply {
-            uppers.forEachIndexed { i, u -> val x = xOf(xVals[i]); val y = yOf(u); if (i == 0) moveTo(x, y) else lineTo(x, y) }
-            lowers.forEachIndexed { i, l -> lineTo(xOf(xVals[lowers.size - 1 - i]), yOf(lowers[lowers.size - 1 - i])) }
+            uppers.forEachIndexed { i, u ->
+                val x = xOf(xVals[i + 1]); val y = yOf(u)
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
+            }
+            for (i in lowers.indices.reversed()) lineTo(xOf(xVals[i + 1]), yOf(lowers[i]))
             close()
         }
         drawPath(band, accent.copy(alpha = 0.15f))
@@ -182,22 +188,24 @@ private fun RatingGraph(
         val pts = ranks.mapIndexed { i, r -> Offset(xOf(xVals[i]), yOf(r)) }
         for (i in 0 until pts.size - 1) drawLine(accent, pts[i], pts[i + 1], strokeWidth = 4f)
         pts.forEachIndexed { i, p ->
-            val won = history[i].score == 1.0
-            drawCircle(
-                if (won) Color(0xFF27864A) else Color(0xFFC0392B),
-                radius = 6f, center = p,
-            )
+            // Point 0 is the unplayed start: neutral dot, no win/loss color.
+            if (i == 0) drawCircle(accent, radius = 6f, center = p)
+            else {
+                val won = history[i - 1].score == 1.0
+                drawCircle(
+                    if (won) Color(0xFF27864A) else Color(0xFFC0392B),
+                    radius = 6f, center = p,
+                )
+            }
         }
-        // X endpoints.
+        // X endpoints: game 0 is the start, last is the latest game.
         val xLabel = { i: Int ->
-            if (xMode == StatsX.GAMES) "${i + 1}"
-            else dateFmt.format(Date(history[i].ts))
+            if (xMode == StatsX.GAMES) "$i"
+            else dateFmt.format(Date(if (i == 0) history.first().ts else history[i - 1].ts))
         }
         val first = textMeasurer.measure(xLabel(0), labelStyle)
         drawText(first, onSurface, topLeft = Offset(left - first.size.width / 2f, h + 4.dp.toPx()))
-        if (history.size > 1) {
-            val last = textMeasurer.measure(xLabel(history.size - 1), labelStyle)
-            drawText(last, onSurface, topLeft = Offset(left + w - last.size.width / 2f, h + 4.dp.toPx()))
-        }
+        val last = textMeasurer.measure(xLabel(display.size - 1), labelStyle)
+        drawText(last, onSurface, topLeft = Offset(left + w - last.size.width / 2f, h + 4.dp.toPx()))
     }
 }

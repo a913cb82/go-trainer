@@ -223,12 +223,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             // winrate off the live player rating. The pick persists as the
             // rung, so reopening the sheet in Fixed shows what was played.
             var picked = rank
-            var predicted: Double? = null
             if (difficulty == Difficulty.AUTOMATCH) {
                 val rating = PlayerRating.rate(settings.ratedHistory.first())
                 val rung = GameFlow.automatchRung(rating.rating, t)
                 picked = Rank.ALL[rung]
-                predicted = Glicko2.expectedScore(rating, BotRatings.forRank(picked), BotRatings.BOT_RD)
             }
             settings.setRank(picked)
             pendingFreePly = false
@@ -237,7 +235,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 bestCount = b, worstCount = w,
                 colorChoice = color, showFeedback = feedback,
                 difficulty = difficulty, targetWinrate = t,
-                predictedWinrate = predicted,
             )
             updatePlayerRankText()
             newGame()

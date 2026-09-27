@@ -243,7 +243,7 @@ class GameScreenshots {
             "14_automatch_game",
             GameState(
                 rank = Rank.R8K, multipleChoice = false,
-                difficulty = Difficulty.AUTOMATCH, predictedWinrate = 0.5,
+                difficulty = Difficulty.AUTOMATCH,
                 candidates = DemoCandidates,
             ),
         )
