@@ -214,6 +214,42 @@ class GameScreenshots {
     }
 
     @Test
+    fun s13_automatch_sheet() {
+        snap("13_automatch_sheet") {
+            Surface {
+                OpponentSheetContent(
+                    s = GameState(
+                        rank = Rank.R8K, multipleChoice = false,
+                        difficulty = Difficulty.AUTOMATCH, targetWinrate = 50,
+                        playerRankText = "12k ±3",
+                    ),
+                    draftRank = Rank.R8K, onDraftRank = {},
+                    draftMultipleChoice = false, onDraftMultipleChoice = {},
+                    draftBest = 2, onDraftBest = {},
+                    draftWorst = 3, onDraftWorst = {},
+                    draftColor = ColorChoice.BLACK, onDraftColor = {},
+                    draftFeedback = true, onDraftFeedback = {},
+                    draftDifficulty = Difficulty.AUTOMATCH, onDraftDifficulty = {},
+                    draftTargetWinrate = 50, onDraftTargetWinrate = {},
+                    onStart = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun s14_automatch_game() {
+        game(
+            "14_automatch_game",
+            GameState(
+                rank = Rank.R8K, multipleChoice = false,
+                difficulty = Difficulty.AUTOMATCH, predictedWinrate = 0.5,
+                candidates = DemoCandidates,
+            ),
+        )
+    }
+
+    @Test
     fun s08_finished() {
         // Engine-scored (decimals) rather than the local estimate.
         game(
