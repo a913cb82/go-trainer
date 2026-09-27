@@ -170,6 +170,22 @@ class GameScreenshots {
     }
 
     @Test
+    fun s10_pass() {
+        // Black just passed: the board is unchanged, so the chip names the
+        // passer ("Black passed · White to play").
+        game(
+            "10_pass",
+            GameState(
+                boardSignMap = MidBoard,
+                history = MidHistory + MoveRec(-1, -1, 1),
+                toMove = -1,
+                passing = 1,
+                winrateHistory = WinDemo,
+            ),
+        )
+    }
+
+    @Test
     fun s08_finished() {
         // Engine-scored (decimals) rather than the local estimate.
         game(

@@ -45,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -174,15 +175,22 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
             s.boardSignMap
         }
 
+    // Passes leave no stone: the chip names the passer, live and in review.
+    // The passer is the move's own color (a pass always flips the side to move).
+    val passPrefix = if (last != null && last.x < 0 && s.status == "playing") {
+        (if (last.color == 1) "Black" else "White") + " passed · "
+    } else {
+        ""
+    }
     val statusText = when {
-        rIdx != null -> "Reviewing move $rIdx of ${s.history.size}"
+        rIdx != null -> "Reviewing move $rIdx of ${s.history.size}" + (if (passPrefix.isNotEmpty()) " · pass" else "")
         // Never flash the local estimate as if it were the result: count first,
         // then show the engine's authoritative score (local only if scoring fails).
         s.status == "finished" && s.scoring -> "Game over · scoring…"
         s.status == "finished" -> "Game over · " + Scoring.formatLead(s.finalScoreLead ?: Scoring.estimate(reviewBoard).diff)
-        s.isThinking -> "${if (s.toMove == 1) "Black" else "White"} thinking…"
-        s.toMove == 1 -> "Black to play"
-        else -> "White to play"
+        s.isThinking -> "$passPrefix${if (s.toMove == 1) "Black" else "White"} thinking…"
+        s.toMove == 1 -> "${passPrefix}Black to play"
+        else -> "${passPrefix}White to play"
     }
 
     Scaffold(
@@ -211,7 +219,11 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                         }
                     },
                 )
-                if (s.isThinking) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                // Always composed (transparent when idle) so the board never
+                // jumps when the engine starts/stops thinking.
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().alpha(if (s.isThinking) 1f else 0f),
+                )
             }
         },
         snackbarHost = { SnackbarHost(snack) },
