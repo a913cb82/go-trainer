@@ -1,8 +1,8 @@
 package com.gotrainer.nine
 
 import com.gotrainer.nine.game.GoBoard
+import com.gotrainer.nine.game.MoveRec
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GoBoardTest {
@@ -40,30 +40,18 @@ class GoBoardTest {
         assertEquals(-1, b.play(-1, 3, 3))
     }
 
-    @Test fun `ko ban blocks immediate recapture`() {
-        // Classic ko shape: verify detectKo flags single-stone capture
-        val b = GoBoard()
-        b.play(1, 1, 0)
-        b.play(1, 0, 1)
-        b.play(1, 2, 2)
-        b.play(1, 1, 3)
-        b.play(1, 2, 1)
-        b.play(-1, 1, 1)
-        b.play(-1, 2, 0)
-        b.play(-1, 0, 2)
-        b.play(-1, 2, 3)
-        val before = b.copy()
-        val captured = b.play(-1, 1, 2)
-        assertTrue(captured >= 0)
-        val ko = GoBoard.detectKo(before, b, 1, 2)
-        // Either ko detected or multi-change (shape-dependent); just assert replay works
-        val replayed = GoBoard.fromHistory(
-            listOf(
-                com.gotrainer.nine.game.MoveRec(1, 0, 1),
-                com.gotrainer.nine.game.MoveRec(1, 1, -1),
-            )
+    @Test fun `replay rebuilds board and position hashes`() {
+        // Passes never change the board, so they add no new hash.
+        val hist = listOf(
+            MoveRec(1, 0, 1),
+            MoveRec(1, 1, -1),
+            MoveRec(-1, -1, 1),
         )
-        assertEquals(1, replayed[1, 0])
+        val rep = GoBoard.replay(hist)
+        assertEquals(1, rep.board[1, 0])
+        assertEquals(-1, rep.board[1, 1])
+        assertEquals(3, rep.hashes.size) // empty + 2 stone plies
+        assertEquals(rep.board.positionHash(), GoBoard.fromHistory(hist).positionHash())
     }
 
     @Test fun `gtp coord skips I`() {

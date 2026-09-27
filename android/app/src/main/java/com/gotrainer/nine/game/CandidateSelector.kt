@@ -83,18 +83,25 @@ object CandidateSelector {
         poolByScore: List<PoolEntry>,
         best: Int,
         worst: Int,
+        toMove: Int,
     ): List<Candidate> {
         val b = best.coerceIn(0, 5)
         val w = worst.coerceIn(0, 5)
         if (b + w <= 0) return emptyList()
-        val bestScore = poolByScore.maxOfOrNull { it.strongScore } ?: return emptyList()
-        val human = humanPool(poolByHuman)
+        // Pools arrive in engine (BLACK-perspective) scores; rank from the
+        // side-to-move's point of view so White's best/worst groups are
+        // White's. Winrates stay Black-perspective (the ViewModel flips those
+        // for display); only scores drive ranking, tags and gaps.
+        val humanIn = if (toMove == 1) poolByHuman else poolByHuman.map { it.copy(strongScore = -it.strongScore) }
+        val scoreIn = if (toMove == 1) poolByScore else poolByScore.map { it.copy(strongScore = -it.strongScore) }
+        val bestScore = scoreIn.maxOfOrNull { it.strongScore } ?: return emptyList()
+        val human = humanPool(humanIn)
         // Stable sort: the input is policy-sorted, so equal losses keep the more
         // human move first (ties are common at ~150 analyze visits).
         val humanByLoss = human.sortedBy { lossOf(it, bestScore) }
         val picked = humanByLoss.take(b).map { it to "good" } +
             humanByLoss.takeLast(w.coerceAtMost(humanByLoss.size)).map { it to "overconcentrated" }
-        return assemble(picked, poolByHuman, bestScore, b + w, flat = false)
+        return assemble(picked, humanIn, bestScore, b + w, flat = false)
     }
 
     fun select(

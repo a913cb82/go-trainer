@@ -33,7 +33,7 @@ Two nets share the work. The small b10 net searches moves. The b18 human net ste
 
 Play uses a persistent board. The bot uses 10 visits per reply. Candidates use 150 visits per query. Typical replies take under one second on warm hardware. First load takes a few seconds.
 
-Rules are Japanese area scoring with komi 7. Scoring uses engine `final_score`. The app exports games as SGF.
+Rules are Chinese area scoring with komi 7.5. Scoring uses engine `final_score`. The app exports games as SGF.
 
 ## Project layout
 

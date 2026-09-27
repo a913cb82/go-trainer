@@ -173,7 +173,7 @@ class CandidateSelectorTest {
             PoolEntry(7, 7, humanPolicy = 5.0, strongScore = 60.0),
         )
         val byS = wide.sortedByDescending { it.strongScore }
-        val out = CandidateSelector.selectBestWorst(wide, byS, 2, 3)
+        val out = CandidateSelector.selectBestWorst(wide, byS, 2, 3, toMove = 1)
         assertEquals(5, out.size)
         assertEquals(2, out.count { it.tag == "good" })
         assertEquals(3, out.count { it.tag == "overconcentrated" })
@@ -182,13 +182,13 @@ class CandidateSelectorTest {
 
     @Test fun `best worst zero and zero returns empty`() {
         val (byH, byS) = pool()
-        assertTrue(CandidateSelector.selectBestWorst(byH, byS, 0, 0).isEmpty())
+        assertTrue(CandidateSelector.selectBestWorst(byH, byS, 0, 0, toMove = 1).isEmpty())
     }
 
     @Test fun `best worst clamps to five`() {
         val wide = (0 until 14).map { PoolEntry(it, 0, humanPolicy = 10.0, strongScore = 100.0 - it) }
         val byS = wide.sortedByDescending { it.strongScore }
-        val out = CandidateSelector.selectBestWorst(wide, byS, 9, 9)
+        val out = CandidateSelector.selectBestWorst(wide, byS, 9, 9, toMove = 1)
         assertEquals(10, out.size)
         assertEquals(5, out.count { it.tag == "good" })
         assertEquals(5, out.count { it.tag == "overconcentrated" })

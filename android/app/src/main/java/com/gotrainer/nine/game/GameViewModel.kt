@@ -62,16 +62,32 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 return@launch
             }
-            // Pre-warm the on-device engine while the UI renders; the first query
-            // shares the same start mutex, so exactly one engine spawns.
-            viewModelScope.launch {
-                try {
-                    katago.ensureStarted()
-                } catch (e: Exception) {
-                    _state.value = _state.value.copy(error = e.message ?: "Engine start failed")
+            // Background preload while the human thinks: a cold start (process
+            // spawn, model load, NN-cache warmup) never sits on the first
+            // reply's critical path. Skipped when the bot is to move — its
+            // reply self-starts the engine with the thinking bar shown.
+            // The first query shares the same start mutex, so exactly one
+            // engine spawns.
+            if (GameFlow.preloadWanted(
+                    humanToMove = _state.value.playerColor == 1,
+                    engineReady = katago.engineReady.value,
+                )
+            ) {
+                viewModelScope.launch {
+                    try {
+                        katago.ensureStarted()
+                    } catch (e: Exception) {
+                        _state.value = _state.value.copy(error = e.message ?: "Engine start failed")
+                    }
                 }
             }
-            requestCandidates()
+            // The opener delegates to GameFlow so the White-second path is
+            // testable; behaviour is unchanged (candidates are always
+            // requested, so the bot never opens for White).
+            when (GameFlow.openingAction(_state.value.playerColor)) {
+                GameFlow.OpeningAction.REQUEST_CANDIDATES -> requestCandidates()
+                GameFlow.OpeningAction.BOT_REPLY -> botReply()
+            }
         }
     }
 
@@ -88,7 +104,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun asPlayerWinrate(w: Double, playerColor: Int): Double =
         if (playerColor == 1) w else 1.0 - w
 
-    private fun board(): GoBoard = GoBoard.fromHistory(_state.value.history)
 
     private fun syncBoard(s: GameState): GameState =
         s.copy(boardSignMap = GoBoard.fromHistory(s.history).signMap())
@@ -218,8 +233,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         val passColor = s.toMove
         val hist = s.history + MoveRec(-1, -1, s.toMove)
+        // The carried-forward point is a placeholder: the bot's root appraises
+        // this exact board moments later and backfills it (see botReply).
+        pendingFreePly = true
         _state.value = syncBoard(
-            s.copy(history = hist, toMove = -s.toMove, passing = p, candidates = null)
+            s.copy(
+                history = hist, toMove = -s.toMove, passing = p, candidates = null,
+                winrateHistory = GameFlow.humanPassWinrates(s.winrateHistory),
+            )
         )
         // Sync the pass into the persistent board, then the bot replies
         // (with its own move, or a pass back -> finished).
@@ -269,8 +290,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (s.status != "playing" || s.toMove != s.playerColor || s.reviewIdx != null || s.isThinking) return
         if (s.choiceCount == 0) {
             // Free choice (0 moves): any legal point, then bot replies.
-            val b = board()
-            if (b.play(s.playerColor, x, y, currentKo()) < 0) return
+            val pos = currentPosition()
+            if (pos.board.play(s.playerColor, x, y, pos.hashes) < 0) return
             applyPlayerMove(x, y, null)
             return
         }
@@ -279,28 +300,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         onPick(cand.x, cand.y)
     }
 
-    private fun currentKo(): Pair<Int, Int>? {
-        // Recompute ko ban from history replay.
-        val hist = _state.value.history
-        var ko: Pair<Int, Int>? = null
-        val b = GoBoard(9)
-        for (m in hist) {
-            if (m.x < 0) {
-                ko = null
-                continue
-            }
-            val before = b.copy()
-            if (b.play(m.color, m.x, m.y, ko) < 0) continue
-            ko = GoBoard.detectKo(before, b, m.x, m.y)
-        }
-        return ko
-    }
+    /** Board + every position hash in one replay (superko legality, one pass). */
+    private fun currentPosition(): GoBoard.ReplayResult = GoBoard.replay(_state.value.history)
 
     private fun onPick(x: Int, y: Int) {
         val s = _state.value
         val was = s.candidates ?: return
-        val b = board()
-        if (b.play(s.playerColor, x, y, currentKo()) < 0) {
+        val pos = currentPosition()
+        if (pos.board.play(s.playerColor, x, y, pos.hashes) < 0) {
             _state.value = s.copy(error = "Illegal move")
             return
         }
@@ -359,12 +366,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     val p = cur.passing + 1
                     val hist = cur.history + MoveRec(-1, -1, cur.toMove)
                     // Even when the bot passes, its root appraises our last move.
-                    val winrates = if (pendingFreePly && cur.winrateHistory.isNotEmpty()) {
-                        pendingFreePly = false
-                        cur.winrateHistory.dropLast(1) + prevW
-                    } else {
-                        cur.winrateHistory
-                    }
+                    val passStep = GameFlow.botReplyWinrates(cur.winrateHistory, pendingFreePly, prevW, 0.0, botPassed = true)
+                    pendingFreePly = passStep.pendingFreePly
+                    val winrates = passStep.winrates
                     _state.value = if (p >= 2) {
                         val done = syncBoard(cur.copy(history = hist, status = "finished", passing = p, isThinking = false, winrateHistory = winrates))
                         _state.value = done
@@ -377,20 +381,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         return@launch
                     }
                 } else {
-                    val b = GoBoard.fromHistory(cur.history)
-                    // Recompute ko for bot legality
-                    var ko: Pair<Int, Int>? = null
-                    val tmp = GoBoard(9)
-                    for (m in cur.history) {
-                        if (m.x < 0) {
-                            ko = null
-                            continue
-                        }
-                        val before = tmp.copy()
-                        if (tmp.play(m.color, m.x, m.y, ko) < 0) continue
-                        ko = GoBoard.detectKo(before, tmp, m.x, m.y)
-                    }
-                    if (b.play(cur.toMove, res.x, res.y, ko) < 0) {
+                    // Bot legality under the same positional superko (KataGo
+                    // enforces it too under Chinese rules; this is the backstop).
+                    val pos = GoBoard.replay(cur.history)
+                    if (pos.board.play(cur.toMove, res.x, res.y, pos.hashes) < 0) {
                         Log.w(TAG, "bot illegal move ${res.x},${res.y} — passing")
                         val hist = cur.history + MoveRec(-1, -1, cur.toMove)
                         _state.value = syncBoard(cur.copy(history = hist, toMove = -cur.toMove, isThinking = false))
@@ -398,12 +392,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         val hist = cur.history + MoveRec(res.x, res.y, cur.toMove)
                         // Backfill a free-choice placeholder with the root appraisal,
                         // then append the played-move appraisal for the bot's ply.
-                        val winrates = if (pendingFreePly && cur.winrateHistory.isNotEmpty()) {
-                            pendingFreePly = false
-                            cur.winrateHistory.dropLast(1) + prevW + playedW
-                        } else {
-                            cur.winrateHistory + playedW
-                        }
+                        val moveStep = GameFlow.botReplyWinrates(cur.winrateHistory, pendingFreePly, prevW, playedW, botPassed = false)
+                        pendingFreePly = moveStep.pendingFreePly
+                        val winrates = moveStep.winrates
                         _state.value = syncBoard(
                             cur.copy(
                                 history = hist, toMove = -cur.toMove, passing = 0,

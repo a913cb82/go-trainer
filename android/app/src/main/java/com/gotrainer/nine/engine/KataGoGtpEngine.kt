@@ -44,6 +44,9 @@ import java.util.concurrent.TimeUnit
 class KataGoGtpEngine(private val appContext: Context) : GoEngine {
     companion object {
         private const val TAG = "KataGo"
+        /** Trainer rules everywhere: Chinese area scoring, komi 7.5 to White. */
+        private const val RULES = "chinese"
+        private const val KOMI = "7.5"
         private const val START_TIMEOUT_MS = 45_000L
         private const val CMD_TIMEOUT_MS = 10_000L
         // BadukAI default think_time is 10s; the visit cap binds long before it.
@@ -490,8 +493,8 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                 // re-arms the real rank afterwards (cheap, idempotent).
                 command("boardsize 9")
                 command("clear_board")
-                command("komi 7")
-                command("kata-set-rules japanese")
+                command("komi $KOMI")
+                command("kata-set-rules $RULES")
                 setProfile(Rank.R10K)
                 enginePlies = 0
                 // Warmup: one throwaway genmove pays the one-time NN-cache fill
@@ -735,8 +738,8 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
     override suspend fun newGame(rank: Rank) = engineMutex.withLock {
         ensureStarted()
         command("clear_board")
-        command("komi 7")
-        command("kata-set-rules japanese")
+        command("komi $KOMI")
+        command("kata-set-rules $RULES")
         setProfile(rank)
         enginePlies = 0
     }
@@ -851,7 +854,9 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                     "human pool ${CandidateSelector.humanPool(h).size}, n=$n",
             )
             if (h.isEmpty()) throw IllegalStateException("KataGo analyze returned no playable moves")
-            val out = CandidateSelector.selectBestWorst(h, s.ifEmpty { h }, best, worst)
+            // Scores are engine (BLACK-perspective); the selector re-bases them
+            // to the side to move so White's groups are White's.
+            val out = CandidateSelector.selectBestWorst(h, s.ifEmpty { h }, best, worst, toMove)
             Log.i(TAG, "candidates took ${System.currentTimeMillis() - t0}ms (${stats.size} moves)")
             out
         } catch (e: Exception) {
@@ -967,8 +972,8 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
     }
 
     /**
-     * Final score via GTP final_score under Japanese rules (komi 7): proper
-     * counting, instant, no 250-visit analysis needed. No ownership grid —
+     * Final score via GTP final_score under Chinese rules (komi 7.5): proper
+     * area counting by the engine, instant, no 250-visit analysis needed. No ownership grid —
      * ScoreResult.ownership stays null (the UI already handles that: it shows
      * the local estimate until the engine answers).
      */

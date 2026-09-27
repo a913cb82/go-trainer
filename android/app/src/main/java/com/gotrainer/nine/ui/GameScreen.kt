@@ -184,10 +184,11 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     }
     val statusText = when {
         rIdx != null -> "Reviewing move $rIdx of ${s.history.size}" + (if (passPrefix.isNotEmpty()) " · pass" else "")
-        // Never flash the local estimate as if it were the result: count first,
-        // then show the engine's authoritative score (local only if scoring fails).
+        // KataGo is the only scorer: count first, then show its authoritative
+        // score. No local fallback — a guess presented as the result is worse
+        // than admitting the count failed.
         s.status == "finished" && s.scoring -> "Game over · scoring…"
-        s.status == "finished" -> "Game over · " + Scoring.formatLead(s.finalScoreLead ?: Scoring.estimate(reviewBoard).diff)
+        s.status == "finished" -> s.finalScoreLead?.let { "Game over · " + Scoring.formatLead(it) } ?: "Game over · score unavailable"
         s.isThinking -> "$passPrefix${if (s.toMove == 1) "Black" else "White"} thinking…"
         s.toMove == 1 -> "${passPrefix}Black to play"
         else -> "${passPrefix}White to play"
