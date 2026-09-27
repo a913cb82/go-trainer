@@ -78,6 +78,8 @@ data class GameState(
     val targetWinrate: Int = 50,
     /** Live player rank, e.g. "30k? ±12". */
     val playerRankText: String = "30k? ±12",
+    /** Live player μ for the automatch preview; defaults to the 30k start. */
+    val playerRating: Double = BotRatings.START_RATING,
 ) {
     /** Moves offered per turn: best + worst while multiple-choice is on, else 0. */
     val choiceCount: Int get() = if (!multipleChoice) 0 else bestCount + worstCount

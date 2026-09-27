@@ -247,7 +247,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val dev = BotRatings.rankDeviation(r.rating, r.rd).roundToInt()
         _state.value = _state.value.copy(
             playerRankText = "${BotRatings.playerLabel(r.rating, r.rd)} ±$dev",
+            playerRating = r.rating,
         )
+    }
+
+    /** Stats-screen reset: wipe history, rank text folds back to the start. */
+    fun resetHistory() {
+        viewModelScope.launch {
+            settings.clearRated()
+            updatePlayerRankText()
+        }
     }
 
     fun setGraphOpen(v: Boolean) {

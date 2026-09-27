@@ -12,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +25,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,12 +66,26 @@ private enum class StatsX { GAMES, TIME }
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> Unit) {
+fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> Unit, onReset: () -> Unit) {
     var xMode by remember { mutableStateOf(StatsX.GAMES) }
+    var confirmReset by remember { mutableStateOf(false) }
     val rating = PlayerRating.rate(history)
     val traj = PlayerRating.trajectory(history)
     val wins = history.count { it.score == 1.0 }
     val losses = history.count { it.score == 0.0 }
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Reset rating history?") },
+            text = { Text("Clears all ${history.size} rated games. Your rank returns to 30k.") },
+            confirmButton = {
+                TextButton(onClick = { confirmReset = false; onReset() }) {
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -76,6 +93,13 @@ fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> 
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (history.isNotEmpty()) {
+                        IconButton(onClick = { confirmReset = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Reset history")
+                        }
                     }
                 },
             )

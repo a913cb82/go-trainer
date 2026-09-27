@@ -96,6 +96,11 @@ class SettingsRepository(private val appContext: Context) {
         }
     }
 
+    /** Clear all rated games (stats-screen reset; rank returns to 30k). */
+    suspend fun clearRated() {
+        appContext.settingsStore.edit { it[RATED_HISTORY] = "" }
+    }
+
     /** Void the pending record when the engine count fails (errors, never losses). */
     suspend fun dropLastRated() {
         val hist = ratedHistory.first()

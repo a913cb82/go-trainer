@@ -209,7 +209,7 @@ class GameScreenshots {
         val r = PlayerRating.rate(hist)
         val label = "${BotRatings.playerLabel(r.rating, r.rd)} ±${BotRatings.rankDeviation(r.rating, r.rd).roundToInt()}"
         snap("12_stats") {
-            StatsScreen(history = hist, playerRankText = label, onBack = {})
+            StatsScreen(history = hist, playerRankText = label, onBack = {}, onReset = {})
         }
     }
 
@@ -221,7 +221,7 @@ class GameScreenshots {
                     s = GameState(
                         rank = Rank.R8K, multipleChoice = false,
                         difficulty = Difficulty.AUTOMATCH, targetWinrate = 50,
-                        playerRankText = "12k ±3",
+                        playerRankText = "12k ±3", playerRating = 1358.0,
                     ),
                     draftRank = Rank.R8K, onDraftRank = {},
                     draftMultipleChoice = false, onDraftMultipleChoice = {},

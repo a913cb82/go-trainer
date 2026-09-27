@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
 import com.gotrainer.nine.game.Difficulty
+import com.gotrainer.nine.game.GameFlow
 import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.label
@@ -101,7 +102,10 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     }
 
     if (showStats) {
-        StatsScreen(history = history, playerRankText = s.playerRankText, onBack = { showStats = false })
+        StatsScreen(
+            history = history, playerRankText = s.playerRankText,
+            onBack = { showStats = false }, onReset = vm::resetHistory,
+        )
         return
     }
     GameScreenContent(
@@ -420,8 +424,13 @@ internal fun OpponentSheetContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Automatch previews the rung Start would pick, live as the slider moves.
+            val autoRank = Rank.ALL[GameFlow.automatchRung(s.playerRating, draftTargetWinrate)]
             Text("Opponent plays as", style = MaterialTheme.typography.bodyMedium)
-            Text(draftRank.id, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(
+                (if (draftDifficulty == Difficulty.AUTOMATCH) autoRank else draftRank).id,
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+            )
         }
         if (draftDifficulty == Difficulty.FIXED) {
             val rankIdx = Rank.ALL.indexOf(draftRank).coerceAtLeast(0)
