@@ -52,7 +52,8 @@ object CandidateSelector {
     /**
      * Strategy shape: (best-group slots, worst-group slots). The worst group
      * holds the highest-loss moves in the human pool; the best group the
-     * lowest-loss. Scales with n (the app offers 0/3/5).
+     * lowest-loss. Scales with n (legacy 0/3/5 presets; the sheet now uses
+     * [selectBestWorst] directly).
      */
     fun slots(strategy: Strategy, n: Int): Pair<Int, Int> = when (strategy) {
         Strategy.HUMAN_ONLY -> 0 to 0
@@ -72,6 +73,30 @@ object CandidateSelector {
         Strategy.TESUJI -> 1 to maxOf(0, n - 1)
     }
 
+    /**
+     * Direct best/worst split (the setup sheet's two sliders): [best] lowest-loss
+     * moves and [worst] highest-loss moves inside the human pool. Zero-latency:
+     * pure re-ranking of the single 150-visit analyze pool, no extra query.
+     */
+    fun selectBestWorst(
+        poolByHuman: List<PoolEntry>,
+        poolByScore: List<PoolEntry>,
+        best: Int,
+        worst: Int,
+    ): List<Candidate> {
+        val b = best.coerceIn(0, 5)
+        val w = worst.coerceIn(0, 5)
+        if (b + w <= 0) return emptyList()
+        val bestScore = poolByScore.maxOfOrNull { it.strongScore } ?: return emptyList()
+        val human = humanPool(poolByHuman)
+        // Stable sort: the input is policy-sorted, so equal losses keep the more
+        // human move first (ties are common at ~150 analyze visits).
+        val humanByLoss = human.sortedBy { lossOf(it, bestScore) }
+        val picked = humanByLoss.take(b).map { it to "good" } +
+            humanByLoss.takeLast(w.coerceAtMost(humanByLoss.size)).map { it to "overconcentrated" }
+        return assemble(picked, poolByHuman, bestScore, b + w, flat = false)
+    }
+
     fun select(
         poolByHuman: List<PoolEntry>,
         poolByScore: List<PoolEntry>,
@@ -86,7 +111,7 @@ object CandidateSelector {
         val byLoss = poolByScore.sortedBy { lossOf(it, bestScore) }
 
         val picked: List<Pair<PoolEntry, String>> = when (strategy) {
-            // No score at all: the five most human moves at this rank.
+            // No score at all: the most human moves at this rank.
             Strategy.HUMAN_ONLY -> poolByHuman.take(n).map { it to "ok" }
 
             Strategy.STRONG_ONLY -> byLoss.take(n).map { it to "good" }
@@ -107,6 +132,24 @@ object CandidateSelector {
             }
         }
 
+        // Top up (tiny pools, overlap between groups) from the strategy's own
+        // ordering so the extra candidates stay in character.
+        val fill = when (strategy) {
+            Strategy.STRONG_ONLY -> byLoss
+            Strategy.TESUJI -> humanByLoss
+            else -> poolByHuman
+        }
+        val flat = strategy == Strategy.HUMAN_ONLY || strategy == Strategy.STRONG_ONLY
+        return assemble(picked, fill, bestScore, n, flat)
+    }
+
+    private fun assemble(
+        picked: List<Pair<PoolEntry, String>>,
+        fill: List<PoolEntry>,
+        bestScore: Double,
+        n: Int,
+        flat: Boolean,
+    ): List<Candidate> {
         val seen = LinkedHashSet<String>()
         val out = ArrayList<Candidate>()
         fun add(e: PoolEntry, tag: String) {
@@ -116,7 +159,7 @@ object CandidateSelector {
             out.add(
                 Candidate(
                     x = e.x, y = e.y,
-                    label = "ABCDE"[out.size % 5].toString(),
+                    label = "ABCDEFGHIJ"[out.size % 10].toString(),
                     humanPolicy = e.humanPolicy,
                     strongWinrate = e.strongWinrate,
                     strongScore = e.strongScore,
@@ -126,20 +169,12 @@ object CandidateSelector {
             )
         }
         for ((e, t) in picked) add(e, t)
-        // Top up (tiny pools, overlap between groups) from the strategy's own
-        // ordering so the extra candidates stay in character.
-        val fill = when (strategy) {
-            Strategy.STRONG_ONLY -> byLoss
-            Strategy.TESUJI -> humanByLoss
-            else -> poolByHuman
-        }
         for (e in fill) {
             if (out.size >= n) break
             add(e, "ok")
         }
         // Flat strategies (human-like, strongest) have no best/worst groups:
         // color them positionally — first green, last red, middle yellow.
-        val flat = strategy == Strategy.HUMAN_ONLY || strategy == Strategy.STRONG_ONLY
         if (!flat || out.isEmpty()) return out.take(n)
         return out.take(n).mapIndexed { i, c ->
             c.copy(

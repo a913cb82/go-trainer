@@ -8,7 +8,6 @@ import com.gotrainer.nine.game.GoBoard
 import com.gotrainer.nine.game.MoveRec
 import com.gotrainer.nine.game.PoolEntry
 import com.gotrainer.nine.game.Rank
-import com.gotrainer.nine.game.Strategy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -791,10 +790,11 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         board: List<List<Int>>,
         toMove: Int,
         rank: Rank,
-        n: Int,
-        strategy: Strategy,
+        best: Int,
+        worst: Int,
         history: List<MoveRec>,
     ): List<Candidate> = engineMutex.withLock {
+        val n = best.coerceIn(0, 5) + worst.coerceIn(0, 5)
         val t0 = System.currentTimeMillis()
         try {
             responses.clear() // drop stales from cancelled ops (see engineMutex)
@@ -817,11 +817,11 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             // the play profile for the next bot reply.
             armAnalysisMode()
             val color = if (toMove == 1) "B" else "W"
-            val best = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
+            val report = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
             setProfile(rank)
             // Symmetry-padded filler (minmoves/getAnalysisData) is not a real
             // distinct candidate; keep it only if the real pool is too small.
-            val all = best?.moves ?: emptyList()
+            val all = report?.moves ?: emptyList()
             val real = all.filter { !it.padded }
             val stats = if (real.size >= n) real else real + all.filter { it.padded }
             if (stats.isEmpty()) throw IllegalStateException("KataGo analyze returned no legal moves")
@@ -851,7 +851,7 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                     "human pool ${CandidateSelector.humanPool(h).size}, n=$n",
             )
             if (h.isEmpty()) throw IllegalStateException("KataGo analyze returned no playable moves")
-            val out = CandidateSelector.select(h, s.ifEmpty { h }, strategy, n)
+            val out = CandidateSelector.selectBestWorst(h, s.ifEmpty { h }, best, worst)
             Log.i(TAG, "candidates took ${System.currentTimeMillis() - t0}ms (${stats.size} moves)")
             out
         } catch (e: Exception) {
@@ -885,23 +885,53 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                 val color = if (toMove == 1) "B" else "W"
                 val move = awaitMoveResult(color)
             enginePlies++ // genmove (incl. pass/resign) registers on the board
-            // Richest report gives the graph its winrate/scoreLead.
-            var winrate = 0.5
-            var scoreLead = 0.0
+            // Richest report gives the graph its winrates: the ROOT appraises
+            // the position before the bot's move (== after the human's move,
+            // used to backfill free-choice plies), the PLAYED move's values
+            // appraise the position after it. Same search, zero extra latency.
+            var rootWinrate = 0.5
+            var rootScoreLead = 0.0
             var bestVisits = -1
-            for (l in analyzeLines.toList()) {
+            val reports = analyzeLines.toList().mapNotNull {
                 try {
-                    val rep = parseAnalyzeLine(l)
-                    val v = rep.root?.visits ?: 0
-                    if (v >= bestVisits && rep.root != null) {
-                        bestVisits = v
-                        winrate = rep.root.winrate
-                        scoreLead = rep.root.scoreLead
-                    }
+                    parseAnalyzeLine(it)
                 } catch (_: Exception) {
+                    null
                 }
             }
-            val em = parseGenmovePacket(move, winrate, scoreLead)
+            for (rep in reports) {
+                val v = rep.root?.visits ?: 0
+                if (v >= bestVisits && rep.root != null) {
+                    bestVisits = v
+                    rootWinrate = rep.root.winrate
+                    rootScoreLead = rep.root.scoreLead
+                }
+            }
+            // Played-move appraisal: richest report containing the move.
+            val playedPt = try {
+                parseGenmovePacket(move).let { if (it.pass) null else it.x to it.y }
+            } catch (_: Exception) {
+                null
+            }
+            var winrate = rootWinrate
+            var scoreLead = rootScoreLead
+            if (playedPt != null) {
+                var moveVisits = -1
+                for (rep in reports) {
+                    val rv = rep.root?.visits ?: 0
+                    for (m in rep.moves) {
+                        if (parsePoint(m.move) == playedPt && rv >= moveVisits) {
+                            moveVisits = rv
+                            winrate = m.winrate
+                            scoreLead = m.scoreLead
+                        }
+                    }
+                }
+            }
+            val em = parseGenmovePacket(move, winrate, scoreLead).copy(
+                rootWinrate = rootWinrate,
+                rootScoreLead = rootScoreLead,
+            )
             val tDone = System.currentTimeMillis()
             Log.i(TAG, "genMove took ${tDone - t0}ms (mutexWait=${tLocked - tEnter} sync=${tSync - t0} profile=${tProf - tSync} setup=${tSetup - tProf} search=${tDone - tSetup}) -> $move")
             em

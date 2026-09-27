@@ -27,6 +27,17 @@ internal fun reviewIndexAt(x: Float, width: Int, n: Int): Int? {
 }
 
 /**
+ * X of the vertical review line for [shown] moves shown on a [width]-wide graph
+ * with [n] points. Dots sit mid-cell at (i + 0.5) * step, so the line belongs on
+ * the last shown dot — not one half-step right of it (the old `shown * step`).
+ */
+internal fun reviewLineX(shown: Int, width: Float, n: Int): Float {
+    if (n <= 0 || width <= 0f) return 0f
+    if (shown <= 0) return 0f
+    return (shown - 0.5f) * (width / n)
+}
+
+/**
  * Winrate polyline + 50% dashed midline, doubling as the review scrubber:
  * tap or drag horizontally to step through the game, drag to the right edge
  * (or past it) to return to live play. The vertical line marks the reviewed
@@ -74,7 +85,7 @@ fun WinrateGraph(
         }
         val shown = (reviewIdx ?: n).coerceIn(0, n)
         // Vertical review line + dot at the last shown move.
-        val vx = shown * step
+        val vx = reviewLineX(shown, w, n)
         drawLine(accent.copy(alpha = 0.9f), Offset(vx, 0f), Offset(vx, h), strokeWidth = 3f)
         if (shown >= 1) {
             drawCircle(accent, radius = 6f, center = pts[shown - 1])

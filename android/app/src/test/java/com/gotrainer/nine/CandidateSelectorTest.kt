@@ -160,4 +160,37 @@ class CandidateSelectorTest {
         val out = CandidateSelector.select(byH, byS, Strategy.GOOD_VS_TEMPTING, 5)
         assertEquals(listOf("A", "B", "C", "D", "E"), out.map { it.label })
     }
+
+    @Test fun `best worst split takes lowest and highest loss`() {
+        val wide = listOf(
+            PoolEntry(0, 0, humanPolicy = 20.0, strongScore = 90.0),
+            PoolEntry(1, 1, humanPolicy = 20.0, strongScore = 100.0),
+            PoolEntry(2, 2, humanPolicy = 15.0, strongScore = 95.0),
+            PoolEntry(3, 3, humanPolicy = 15.0, strongScore = 98.0),
+            PoolEntry(4, 4, humanPolicy = 10.0, strongScore = 85.0),
+            PoolEntry(5, 5, humanPolicy = 10.0, strongScore = 99.0),
+            PoolEntry(6, 6, humanPolicy = 5.0, strongScore = 70.0),
+            PoolEntry(7, 7, humanPolicy = 5.0, strongScore = 60.0),
+        )
+        val byS = wide.sortedByDescending { it.strongScore }
+        val out = CandidateSelector.selectBestWorst(wide, byS, 2, 3)
+        assertEquals(5, out.size)
+        assertEquals(2, out.count { it.tag == "good" })
+        assertEquals(3, out.count { it.tag == "overconcentrated" })
+        assertEquals(setOf(1 to 1, 5 to 5), out.filter { it.tag == "good" }.map { it.x to it.y }.toSet())
+    }
+
+    @Test fun `best worst zero and zero returns empty`() {
+        val (byH, byS) = pool()
+        assertTrue(CandidateSelector.selectBestWorst(byH, byS, 0, 0).isEmpty())
+    }
+
+    @Test fun `best worst clamps to five`() {
+        val wide = (0 until 14).map { PoolEntry(it, 0, humanPolicy = 10.0, strongScore = 100.0 - it) }
+        val byS = wide.sortedByDescending { it.strongScore }
+        val out = CandidateSelector.selectBestWorst(wide, byS, 9, 9)
+        assertEquals(10, out.size)
+        assertEquals(5, out.count { it.tag == "good" })
+        assertEquals(5, out.count { it.tag == "overconcentrated" })
+    }
 }

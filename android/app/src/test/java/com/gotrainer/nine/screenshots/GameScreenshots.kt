@@ -12,7 +12,6 @@ import com.gotrainer.nine.ui.GameActions
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.MoveRec
 import com.gotrainer.nine.game.Rank
-import com.gotrainer.nine.game.Strategy
 import com.gotrainer.nine.ui.GameScreenContent
 import com.gotrainer.nine.ui.OpponentSheetContent
 import com.gotrainer.nine.ui.goTrainerTheme
@@ -104,7 +103,7 @@ class GameScreenshots {
     fun s02_opponent_sheet() {
         snap("02_opponent_sheet") {
             Surface {
-                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftN = 5, onDraftN = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftStrategy = Strategy.GOOD_VS_TEMPTING, onDraftStrategy = {}, draftFeedback = true, onDraftFeedback = {}, onStart = {})
+                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, onStart = {})
             }
         }
     }
@@ -132,7 +131,7 @@ class GameScreenshots {
                 boardSignMap = MidBoard,
                 history = MidHistory,
                 toMove = 1,
-                n = 0,
+                multipleChoice = false,
                 winrateHistory = WinDemo,
             ),
         )
@@ -256,12 +255,12 @@ class GameScreenshotsDark {
         snap("11_dark_sheet") {
             Surface {
                 OpponentSheetContent(
-                    s = GameState(rank = Rank.R3D, n = 0, strategy = Strategy.STRONG_ONLY, showFeedback = false),
+                    s = GameState(rank = Rank.R3D, multipleChoice = false, showFeedback = false),
                     draftRank = Rank.R3D, onDraftRank = {},
-                    draftN = 0, onDraftN = {},
+                    draftMultipleChoice = false, onDraftMultipleChoice = {},
+                    draftBest = 2, onDraftBest = {},
+                    draftWorst = 3, onDraftWorst = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
-
-                    draftStrategy = Strategy.STRONG_ONLY, onDraftStrategy = {},
                     draftFeedback = false, onDraftFeedback = {},
                     onStart = {},
                 )

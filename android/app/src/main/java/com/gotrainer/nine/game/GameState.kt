@@ -38,8 +38,11 @@ data class GameState(
     val history: List<MoveRec> = emptyList(),
     val toMove: Int = 1,
     val rank: Rank = Rank.R10K,
-    val n: Int = 5,
-    val strategy: Strategy = Strategy.GOOD_VS_TEMPTING,
+    /** Multiple-choice mode: when false the player plays anywhere (free choice). */
+    val multipleChoice: Boolean = true,
+    /** Best-group slots (0-5) and worst-group slots (0-5) from the sheet sliders. */
+    val bestCount: Int = 2,
+    val worstCount: Int = 3,
     val candidates: List<Candidate>? = null,
     val evaluations: List<EvaluatedMove>? = null,
     val showFeedback: Boolean = true,
@@ -50,6 +53,8 @@ data class GameState(
     val isThinking: Boolean = false,
     val reviewIdx: Int? = null,
     val error: String? = null,
+    /** Winrate card expanded; persisted across app opens. */
+    val graphOpen: Boolean = true,
     /** Candidates offered at each position (keyed by moves played before Black's pick). */
     val pastCandidates: Map<Int, List<Candidate>> = emptyMap(),
     /** Feedback recorded for each Black pick (same keying), so review shows real history. */
@@ -65,4 +70,7 @@ data class GameState(
     val scoring: Boolean = false,
     /** Engine ownership map for future heatmaps; null until scored or unavailable. */
     val finalOwnership: List<List<Double>>? = null,
-)
+) {
+    /** Moves offered per turn: best + worst while multiple-choice is on, else 0. */
+    val choiceCount: Int get() = if (!multipleChoice) 0 else bestCount + worstCount
+}

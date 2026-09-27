@@ -27,4 +27,12 @@ class WinrateGraphTest {
         assertNull(reviewIndexAt(50f, 1000, 0))
         assertNull(reviewIndexAt(50f, 1000, 1))
     }
+
+    @Test fun `review line sits on the last shown dot`() {
+        // Dots at (i + 0.5) * step: the line belongs on the dot, not half a
+        // step right of it (the old shown * step put it between dots).
+        assertEquals(950f, reviewLineX(10, 1000f, 10))
+        assertEquals(450f, reviewLineX(5, 1000f, 10))
+        assertEquals(0f, reviewLineX(0, 1000f, 10))
+    }
 }

@@ -32,6 +32,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = SettingsRepository(app.applicationContext)
     private val katago = KataGoGtpEngine(app.applicationContext)
     private var fetchJob: Job? = null
+    /**
+     * True when the last appended winrate point is a free-choice placeholder
+     * (carry-forward) waiting for the bot's root appraisal of the same board.
+     * Cleared on new game / undo / setup, consumed in [botReply].
+     */
+    private var pendingFreePly = false
 
     private val _state = MutableStateFlow(GameState())
     val state: StateFlow<GameState> = _state.asStateFlow()
@@ -40,9 +46,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val s = settings.settings.first()
             _state.value = _state.value.copy(
-                rank = s.rank, n = s.n, colorChoice = s.colorChoice,
+                rank = s.rank,
+                multipleChoice = s.multipleChoice,
+                bestCount = s.bestCount,
+                worstCount = s.worstCount,
+                colorChoice = s.colorChoice,
                 playerColor = resolveColor(s.colorChoice),
-                strategy = s.strategy, showFeedback = s.showFeedback,
+                showFeedback = s.showFeedback,
+                graphOpen = s.graphOpen,
             )
             // On-device mode needs the staged binary; remote mode needs nothing local.
             if (!katago.binaryPresent()) {
@@ -112,6 +123,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newGame() {
         fetchJob?.cancel()
+        pendingFreePly = false
         val playerColor = resolveColor(_state.value.colorChoice)
         _state.value = syncBoard(
             _state.value.copy(
@@ -144,24 +156,34 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun applySetup(
         rank: Rank,
-        n: Int,
+        multipleChoice: Boolean,
+        best: Int,
+        worst: Int,
         color: ColorChoice,
-        strategy: Strategy,
         feedback: Boolean,
     ) {
-        val moves = if (n == 0 || n == 3 || n == 5) n else 5
+        val b = best.coerceIn(0, 5)
+        val w = worst.coerceIn(0, 5)
         viewModelScope.launch {
             settings.setRank(rank)
-            settings.setN(moves)
+            settings.setMultipleChoice(multipleChoice)
+            settings.setBestCount(b)
+            settings.setWorstCount(w)
             settings.setColorChoice(color)
-            settings.setStrategy(strategy)
             settings.setShowFeedback(feedback)
         }
+        pendingFreePly = false
         _state.value = _state.value.copy(
-            rank = rank, n = moves, colorChoice = color,
-            strategy = strategy, showFeedback = feedback,
+            rank = rank, multipleChoice = multipleChoice,
+            bestCount = b, worstCount = w,
+            colorChoice = color, showFeedback = feedback,
         )
         newGame()
+    }
+
+    fun setGraphOpen(v: Boolean) {
+        viewModelScope.launch { settings.setGraphOpen(v) }
+        _state.value = _state.value.copy(graphOpen = v)
     }
 
     fun setShowFeedback(v: Boolean) {
@@ -219,6 +241,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val undone = s.history.size - lastPlayerIdx
         val removedPlies = undone
         val hist = s.history.subList(0, lastPlayerIdx)
+        pendingFreePly = false
         _state.value = syncBoard(
             s.copy(
                 history = hist.toList(), toMove = s.playerColor, candidates = null, evaluations = null,
@@ -244,7 +267,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun onBoardTap(x: Int, y: Int) {
         val s = _state.value
         if (s.status != "playing" || s.toMove != s.playerColor || s.reviewIdx != null || s.isThinking) return
-        if (s.n == 0) {
+        if (s.choiceCount == 0) {
             // Free choice (0 moves): any legal point, then bot replies.
             val b = board()
             if (b.play(s.playerColor, x, y, currentKo()) < 0) return
@@ -288,14 +311,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun applyPlayerMove(x: Int, y: Int, picked: com.gotrainer.nine.game.Candidate?) {
         val s = _state.value
         val was = s.candidates
-        val evals = if (was != null && s.n != 0) CandidateSelector.toEvaluated(was) else s.evaluations
+        val evals = if (was != null && s.choiceCount != 0) CandidateSelector.toEvaluated(was) else s.evaluations
         val hist = s.history + MoveRec(x, y, s.playerColor, picked, null)
         // Candidates are stored in human-perspective winrate (converted at fetch).
-        // Free play has no evaluation for the player's move: carry the last known
-        // value forward instead of inventing 50%, then the bot's reply appraisal
-        // replaces it (a fabricated 0.5 made the graph read 50% on every black move).
+        // Free choice has no per-move analysis: carry the last known value forward
+        // as a placeholder — the bot's genmove_analyze root appraises this exact
+        // board moments later and backfills it (same search, zero extra latency).
+        // A fabricated 0.5 made the graph read 50% on every black move.
         val win = picked?.strongWinrate ?: (s.winrateHistory.lastOrNull() ?: 0.5)
-        val pastEvals = if (evals != null && s.n != 0) s.pastEvals + (s.history.size to evals) else s.pastEvals
+        pendingFreePly = picked == null
+        val pastEvals = if (evals != null && s.choiceCount != 0) s.pastEvals + (s.history.size to evals) else s.pastEvals
         _state.value = syncBoard(
             s.copy(
                 history = hist, toMove = -s.playerColor, passing = 0, candidates = null,
@@ -326,16 +351,27 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 if (s.status != "playing") return@launch
                 val res = eng.genMove(s.boardSignMap, s.toMove, s.rank, s.history)
                 val cur = _state.value
+                // Same search, two appraisals (BLACK -> human perspective): the root
+                // is the board after the human's move, the played value after the bot's.
+                val prevW = asPlayerWinrate(res.rootWinrate, cur.playerColor)
+                val playedW = asPlayerWinrate(res.winrate, cur.playerColor)
                 if (res.pass) {
                     val p = cur.passing + 1
                     val hist = cur.history + MoveRec(-1, -1, cur.toMove)
+                    // Even when the bot passes, its root appraises our last move.
+                    val winrates = if (pendingFreePly && cur.winrateHistory.isNotEmpty()) {
+                        pendingFreePly = false
+                        cur.winrateHistory.dropLast(1) + prevW
+                    } else {
+                        cur.winrateHistory
+                    }
                     _state.value = if (p >= 2) {
-                        val done = syncBoard(cur.copy(history = hist, status = "finished", passing = p, isThinking = false))
+                        val done = syncBoard(cur.copy(history = hist, status = "finished", passing = p, isThinking = false, winrateHistory = winrates))
                         _state.value = done
                         requestFinalScore()
                         return@launch
                     } else {
-                        val next = syncBoard(cur.copy(history = hist, toMove = -cur.toMove, passing = p, isThinking = false))
+                        val next = syncBoard(cur.copy(history = hist, toMove = -cur.toMove, passing = p, isThinking = false, winrateHistory = winrates))
                         _state.value = next
                         requestCandidates()
                         return@launch
@@ -360,11 +396,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         _state.value = syncBoard(cur.copy(history = hist, toMove = -cur.toMove, isThinking = false))
                     } else {
                         val hist = cur.history + MoveRec(res.x, res.y, cur.toMove)
+                        // Backfill a free-choice placeholder with the root appraisal,
+                        // then append the played-move appraisal for the bot's ply.
+                        val winrates = if (pendingFreePly && cur.winrateHistory.isNotEmpty()) {
+                            pendingFreePly = false
+                            cur.winrateHistory.dropLast(1) + prevW + playedW
+                        } else {
+                            cur.winrateHistory + playedW
+                        }
                         _state.value = syncBoard(
                             cur.copy(
                                 history = hist, toMove = -cur.toMove, passing = 0,
                                 isThinking = false,
-                                winrateHistory = cur.winrateHistory + asPlayerWinrate(res.winrate, cur.playerColor),
+                                winrateHistory = winrates,
                             )
                         )
                     }
@@ -379,7 +423,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun requestCandidates() {
         val s = _state.value
-        if (s.n == 0 || s.reviewIdx != null || s.status != "playing" || s.toMove != s.playerColor) return
+        if (s.choiceCount == 0 || s.reviewIdx != null || s.status != "playing" || s.toMove != s.playerColor) return
         if (s.candidates != null) return
         val eng = engine()
         fetchJob?.cancel()
@@ -388,7 +432,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val cur = _state.value
                 val atPly = cur.history.size
-                val raw = eng.candidates(cur.boardSignMap, cur.playerColor, cur.rank, cur.n, cur.strategy, cur.history)
+                val raw = eng.candidates(cur.boardSignMap, cur.playerColor, cur.rank, cur.bestCount, cur.worstCount, cur.history)
                 // Pills and the graph speak for the human; the engine reports BLACK.
                 val moves = if (cur.playerColor == 1) raw else raw.map { it.copy(strongWinrate = 1.0 - it.strongWinrate) }
                 _state.value = _state.value.copy(

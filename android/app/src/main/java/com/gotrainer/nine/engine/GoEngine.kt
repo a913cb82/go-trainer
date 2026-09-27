@@ -1,12 +1,24 @@
 package com.gotrainer.nine.engine
 
 import com.gotrainer.nine.game.Candidate
-import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.MoveRec
 import com.gotrainer.nine.game.Rank
-import com.gotrainer.nine.game.Strategy
 
-data class EngineMove(val x: Int, val y: Int, val pass: Boolean = false, val winrate: Double = 0.5, val scoreLead: Double = 0.0)
+/**
+ * Bot reply: [winrate]/[scoreLead] appraise the position AFTER the bot's move
+ * (the played move's analyze values); [rootWinrate]/[rootScoreLead] appraise
+ * the position BEFORE it (== after the human's move). Both come from the one
+ * genmove_analyze search, so backfilling the human ply costs zero extra latency.
+ */
+data class EngineMove(
+    val x: Int,
+    val y: Int,
+    val pass: Boolean = false,
+    val winrate: Double = 0.5,
+    val scoreLead: Double = 0.0,
+    val rootWinrate: Double = 0.5,
+    val rootScoreLead: Double = 0.0,
+)
 data class Evaluation(val winrate: Double, val scoreLead: Double)
 
 /**
@@ -23,8 +35,8 @@ interface GoEngine {
         board: List<List<Int>>,
         toMove: Int,
         rank: Rank,
-        n: Int,
-        strategy: Strategy,
+        best: Int,
+        worst: Int,
         history: List<MoveRec>,
     ): List<Candidate>
 
