@@ -70,6 +70,16 @@ data class GameState(
     val scoring: Boolean = false,
     /** Engine ownership map for future heatmaps; null until scored or unavailable. */
     val finalOwnership: List<List<Double>>? = null,
+    /** Any undo this game: poisons the rated-game upgrade (stays a loss). */
+    val undoUsed: Boolean = false,
+    /** Fixed rung vs automatch-to-target-winrate. */
+    val difficulty: Difficulty = Difficulty.FIXED,
+    /** Automatch target winrate percent (10-90). */
+    val targetWinrate: Int = 50,
+    /** Automatch's honest prediction for the picked rung; null unless automatch. */
+    val predictedWinrate: Double? = null,
+    /** Live player rank, e.g. "30k? ±12". */
+    val playerRankText: String = "30k? ±12",
 ) {
     /** Moves offered per turn: best + worst while multiple-choice is on, else 0. */
     val choiceCount: Int get() = if (!multipleChoice) 0 else bestCount + worstCount

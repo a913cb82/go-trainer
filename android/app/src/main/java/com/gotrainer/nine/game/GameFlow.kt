@@ -1,5 +1,7 @@
 package com.gotrainer.nine.game
 
+import kotlin.math.roundToInt
+
 /**
  * Pure game-flow decisions, extracted VERBATIM from GameViewModel so they can
  * be unit-tested (the ViewModel itself needs Android and KataGo).
@@ -66,4 +68,51 @@ object GameFlow {
      */
     fun humanPassWinrates(cur: List<Double>): List<Double> =
         if (cur.isEmpty()) cur else cur + cur.last()
+
+    // ---- rated games (free-choice only; suggestions games leave no trace) ----
+
+    /**
+     * Whether this player ply writes the ahead-loss record: a rated game in
+     * progress and the player's first ply (stone or pass).
+     */
+    fun ratedAppendWanted(
+        multipleChoice: Boolean,
+        status: String,
+        history: List<MoveRec>,
+        playerColor: Int,
+    ): Boolean =
+        !multipleChoice && status == "playing" &&
+            history.none { it.color == playerColor }
+
+    /**
+     * Upgrade for the pending loss record on a finished game: 1.0 win, 0.5
+     * draw — only with no undos all game. Null = stays a loss. Draws count
+     * as played, not as wins.
+     */
+    fun ratedFinishScore(
+        finalScoreLead: Double,
+        playerBlack: Boolean,
+        undoUsed: Boolean,
+        playerMoved: Boolean,
+    ): Double? {
+        if (undoUsed || !playerMoved) return null
+        if (finalScoreLead == 0.0) return 0.5
+        val won = (finalScoreLead > 0) == playerBlack
+        return if (won) 1.0 else null
+    }
+
+    /**
+     * Automatch rung for a target winrate: invert the expected score, snap
+     * to the nearest ladder rung, clamp at the ends. Pure; the ViewModel
+     * supplies the live player rating.
+     */
+    fun automatchRung(playerRating: Double, targetWinrate: Int): Int {
+        val e = targetWinrate.coerceIn(10, 90) / 100.0
+        val muP = (playerRating - 1500.0) / Glicko2.SCALE
+        val phiBot = BotRatings.BOT_RD / Glicko2.SCALE
+        val g = 1.0 / kotlin.math.sqrt(1.0 + 3.0 * phiBot * phiBot / (kotlin.math.PI * kotlin.math.PI))
+        val muB = muP + kotlin.math.ln((1.0 - e) / e) / g
+        val rank = BotRatings.ratingToRank(Glicko2.SCALE * muB + 1500.0)
+        return rank.roundToInt().coerceIn(0, 38)
+    }
 }

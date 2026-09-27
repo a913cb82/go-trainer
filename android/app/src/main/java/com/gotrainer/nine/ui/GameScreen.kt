@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
@@ -51,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
+import com.gotrainer.nine.game.Difficulty
 import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.label
@@ -63,8 +65,13 @@ import kotlin.math.roundToInt
 /** Header subtitle: rank alone in free play, rank + total choices otherwise. */
 internal fun headerSubtitle(s: GameState): String {
     val total = s.choiceCount
-    if (!s.multipleChoice || total == 0) return s.rank.id
-    return if (total == 1) "${s.rank.id} · 1 choice" else "${s.rank.id} · $total choices"
+    val base = if (!s.multipleChoice || total == 0) s.rank.id
+    else if (total == 1) "${s.rank.id} · 1 choice" else "${s.rank.id} · $total choices"
+    // Automatch shows its honest prediction for the picked rung.
+    val pred = if (s.difficulty == Difficulty.AUTOMATCH) {
+        s.predictedWinrate?.let { " · ~${(it * 100).roundToInt()}%" }
+    } else null
+    return base + (pred ?: "")
 }
 
 /** Callbacks so the pure content below is screenshot-friendly (no ViewModel). */
@@ -77,8 +84,9 @@ data class GameActions(
     val onScopeAll: (Boolean) -> Unit = {},
     val onGraphOpen: (Boolean) -> Unit = {},
     val onReview: (Int?) -> Unit = {},
-    val onApplySetup: (Rank, Boolean, Int, Int, ColorChoice, Boolean) -> Unit =
-        { _, _, _, _, _, _ -> },
+    val onApplySetup: (Rank, Boolean, Int, Int, ColorChoice, Boolean, Difficulty, Int) -> Unit =
+        { _, _, _, _, _, _, _, _ -> },
+    val onShowStats: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +94,8 @@ data class GameActions(
 fun GameScreen(vm: GameViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val snack = remember { SnackbarHostState() }
+    var showStats by remember { mutableStateOf(false) }
+    val history by vm.ratedHistoryFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
     s.error?.let { err ->
         LaunchedEffect(err) {
@@ -94,6 +104,10 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
         }
     }
 
+    if (showStats) {
+        StatsScreen(history = history, playerRankText = s.playerRankText, onBack = { showStats = false })
+        return
+    }
     GameScreenContent(
         s = s,
         actions = GameActions(
@@ -106,6 +120,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
             onGraphOpen = vm::setGraphOpen,
             onReview = vm::setReviewIdx,
             onApplySetup = vm::applySetup,
+            onShowStats = { showStats = true },
         ),
         snack = snack,
     )
@@ -123,6 +138,8 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     var draftWorst by remember { mutableStateOf(s.worstCount) }
     var draftColor by remember { mutableStateOf(s.colorChoice) }
     var draftFeedback by remember { mutableStateOf(s.showFeedback) }
+    var draftDifficulty by remember { mutableStateOf(s.difficulty) }
+    var draftTargetWinrate by remember { mutableStateOf(s.targetWinrate) }
     fun openSetup() {
         draftRank = s.rank
         draftMultipleChoice = s.multipleChoice
@@ -130,6 +147,8 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
         draftWorst = s.worstCount
         draftColor = s.colorChoice
         draftFeedback = s.showFeedback
+        draftDifficulty = s.difficulty
+        draftTargetWinrate = s.targetWinrate
         sheetOpen = true
     }
 
@@ -209,6 +228,9 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                         }
                     },
                     actions = {
+                        IconButton(onClick = actions.onShowStats) {
+                            Icon(Icons.Filled.ShowChart, contentDescription = "Stats")
+                        }
                         IconButton(onClick = actions.onUndo, enabled = s.history.isNotEmpty()) {
                             Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
                         }
@@ -317,8 +339,15 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 onDraftColor = { draftColor = it },
                 draftFeedback = draftFeedback,
                 onDraftFeedback = { draftFeedback = it },
+                draftDifficulty = draftDifficulty,
+                onDraftDifficulty = { draftDifficulty = it },
+                draftTargetWinrate = draftTargetWinrate,
+                onDraftTargetWinrate = { draftTargetWinrate = it },
                 onStart = {
-                    actions.onApplySetup(draftRank, draftMultipleChoice, draftBest, draftWorst, draftColor, draftFeedback)
+                    actions.onApplySetup(
+                        draftRank, draftMultipleChoice, draftBest, draftWorst,
+                        draftColor, draftFeedback, draftDifficulty, draftTargetWinrate,
+                    )
                     sheetOpen = false
                 },
             )
@@ -342,6 +371,10 @@ internal fun OpponentSheetContent(
     onDraftColor: (ColorChoice) -> Unit,
     draftFeedback: Boolean,
     onDraftFeedback: (Boolean) -> Unit,
+    draftDifficulty: Difficulty,
+    onDraftDifficulty: (Difficulty) -> Unit,
+    draftTargetWinrate: Int,
+    onDraftTargetWinrate: (Int) -> Unit,
     onStart: () -> Unit,
 ) {
     val showChoiceOptions = draftMultipleChoice && (draftBest + draftWorst) > 0
@@ -370,15 +403,65 @@ internal fun OpponentSheetContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text("Your rank", style = MaterialTheme.typography.bodyMedium)
+            Text(s.playerRankText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+
+        Text("Difficulty", style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow {
+            Difficulty.entries.forEachIndexed { i, d ->
+                SegmentedButton(
+                    selected = draftDifficulty == d,
+                    onClick = { onDraftDifficulty(d) },
+                    shape = SegmentedButtonDefaults.itemShape(i, Difficulty.entries.size),
+                    label = { Text(d.label()) },
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text("Opponent plays as", style = MaterialTheme.typography.bodyMedium)
             Text(draftRank.id, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
-        val rankIdx = Rank.ALL.indexOf(draftRank).coerceAtLeast(0)
-        Slider(
-            value = rankIdx.toFloat(),
-            onValueChange = { onDraftRank(Rank.ALL[it.roundToInt().coerceIn(0, Rank.ALL.size - 1)]) },
-            valueRange = 0f..(Rank.ALL.size - 1).toFloat(),
-            steps = (Rank.ALL.size - 2).coerceAtLeast(0),
+        if (draftDifficulty == Difficulty.FIXED) {
+            val rankIdx = Rank.ALL.indexOf(draftRank).coerceAtLeast(0)
+            Slider(
+                value = rankIdx.toFloat(),
+                onValueChange = { onDraftRank(Rank.ALL[it.roundToInt().coerceIn(0, Rank.ALL.size - 1)]) },
+                valueRange = 0f..(Rank.ALL.size - 1).toFloat(),
+                steps = (Rank.ALL.size - 2).coerceAtLeast(0),
+            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Target winrate", style = MaterialTheme.typography.bodyMedium)
+                Text("$draftTargetWinrate%", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            Slider(
+                value = draftTargetWinrate.toFloat(),
+                onValueChange = { onDraftTargetWinrate(it.roundToInt().coerceIn(10, 90)) },
+                valueRange = 10f..90f,
+                steps = 7,
+            )
+            Text(
+                "Picks the rung nearest your target when you press Start.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // Suggestions games never rate (free-choice only); say so plainly.
+        val ratedGame = !draftMultipleChoice || draftBest + draftWorst == 0
+        Text(
+            if (ratedGame) "Rated · counts toward your rank" else "Unrated · suggestions on",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Row(

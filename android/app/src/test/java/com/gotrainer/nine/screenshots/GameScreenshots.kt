@@ -7,14 +7,20 @@ import app.cash.paparazzi.Paparazzi
 import com.android.ide.common.rendering.api.SessionParams
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
+import com.gotrainer.nine.game.BotRatings
+import com.gotrainer.nine.game.Difficulty
 import com.gotrainer.nine.game.EvaluatedMove
+import com.gotrainer.nine.game.PlayerRating
+import com.gotrainer.nine.game.RatedGame
 import com.gotrainer.nine.ui.GameActions
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.MoveRec
 import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.ui.GameScreenContent
 import com.gotrainer.nine.ui.OpponentSheetContent
+import com.gotrainer.nine.ui.StatsScreen
 import com.gotrainer.nine.ui.goTrainerTheme
+import kotlin.math.roundToInt
 import org.junit.Rule
 import org.junit.Test
 
@@ -103,7 +109,7 @@ class GameScreenshots {
     fun s02_opponent_sheet() {
         snap("02_opponent_sheet") {
             Surface {
-                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, onStart = {})
+                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onStart = {})
             }
         }
     }
@@ -183,6 +189,28 @@ class GameScreenshots {
                 winrateHistory = WinDemo,
             ),
         )
+    }
+
+    @Test
+    fun s12_stats() {
+        // Scripted climb, fixed timestamps for deterministic output.
+        val day = 86_400_000L
+        val base = 1_727_000_000_000L
+        val hist = listOf(
+            RatedGame(base, "30k", true, 1.0),
+            RatedGame(base + day, "29k", true, 1.0),
+            RatedGame(base + 2 * day, "28k", false, 1.0),
+            RatedGame(base + 3 * day, "27k", true, 0.0),
+            RatedGame(base + 4 * day, "27k", true, 1.0),
+            RatedGame(base + 5 * day, "25k", false, 1.0),
+            RatedGame(base + 6 * day, "20k", true, 0.0),
+            RatedGame(base + 7 * day, "24k", true, 1.0),
+        )
+        val r = PlayerRating.rate(hist)
+        val label = "${BotRatings.playerLabel(r.rating, r.rd)} ±${BotRatings.rankDeviation(r.rating, r.rd).roundToInt()}"
+        snap("12_stats") {
+            StatsScreen(history = hist, playerRankText = label, onBack = {})
+        }
     }
 
     @Test
@@ -278,6 +306,8 @@ class GameScreenshotsDark {
                     draftWorst = 3, onDraftWorst = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
                     draftFeedback = false, onDraftFeedback = {},
+                    draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {},
+                    draftTargetWinrate = 50, onDraftTargetWinrate = {},
                     onStart = {},
                 )
             }

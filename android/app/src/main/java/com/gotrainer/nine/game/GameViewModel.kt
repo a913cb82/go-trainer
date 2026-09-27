@@ -8,8 +8,11 @@ import com.gotrainer.nine.data.SettingsRepository
 import com.gotrainer.nine.engine.GoEngine
 import com.gotrainer.nine.engine.KataGoGtpEngine
 import com.gotrainer.nine.engine.ScoreResult
+import com.gotrainer.nine.game.RatedGame
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,9 +41,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * Cleared on new game / undo / setup, consumed in [botReply].
      */
     private var pendingFreePly = false
+    /**
+     * Game generation: incremented on newGame so a late engine score from a
+     * previous game can neither upgrade nor void the current game's rated
+     * record (single active game => last-record ops are safe within a gen).
+     */
+    private var gameSeq = 0
 
     private val _state = MutableStateFlow(GameState())
     val state: StateFlow<GameState> = _state.asStateFlow()
+    /** Rated-game history for the stats screen (rating folds off this). */
+    val ratedHistoryFlow: Flow<List<RatedGame>> = settings.ratedHistory
 
     init {
         viewModelScope.launch {
@@ -54,7 +65,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 playerColor = resolveColor(s.colorChoice),
                 showFeedback = s.showFeedback,
                 graphOpen = s.graphOpen,
+                difficulty = s.difficulty,
+                targetWinrate = s.targetWinrate,
             )
+            updatePlayerRankText()
             // On-device mode needs the staged binary; remote mode needs nothing local.
             if (!katago.binaryPresent()) {
                 _state.value = _state.value.copy(
@@ -109,18 +123,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         s.copy(boardSignMap = GoBoard.fromHistory(s.history).signMap())
 
     // ---- actions ----
-    /** One-shot engine scoring after pass-pass; chip shows the local estimate meanwhile. */
+    /** One-shot engine scoring after pass-pass; chip shows "scoring…" meanwhile. */
     private fun requestFinalScore() {
         val eng = engine()
-        // scoring=true lets the UI show "scoring…" instead of the LOCAL estimate,
-        // which otherwise flashes a wrong number for ~0.5s before the engine's
-        // authoritative count (observed: black +6 -> black +2).
+        val seq = gameSeq
         _state.value = _state.value.copy(scoring = true)
         viewModelScope.launch {
             try {
                 val s = _state.value
                 if (s.status != "finished") return@launch
                 val res: ScoreResult = eng.score(s.boardSignMap, s.history)
+                if (seq != gameSeq) return@launch // stale: a new game owns its records
                 val cur = _state.value
                 if (cur.status == "finished") {
                     _state.value = cur.copy(
@@ -128,10 +141,23 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         finalOwnership = res.ownership,
                         scoring = false,
                     )
+                    // Clean rated finish upgrades the write-ahead loss (win=1,
+                    // draw=0.5); undos, losses and suggestions games stay losses.
+                    if (!cur.multipleChoice && cur.history.any { it.color == cur.playerColor }) {
+                        val upgrade = GameFlow.ratedFinishScore(
+                            res.scoreLeadBlack, cur.playerColor == 1, cur.undoUsed, playerMoved = true,
+                        )
+                        if (upgrade != null) settings.updateLastRated(upgrade)
+                        updatePlayerRankText()
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "final score failed, keeping local estimate", e)
-                _state.value = _state.value.copy(scoring = false)
+                Log.e(TAG, "final score failed", e)
+                if (seq != gameSeq) return@launch
+                // No result, no record: void the pending loss (errors, never losses).
+                settings.dropLastRated()
+                updatePlayerRankText()
+                _state.value = _state.value.copy(scoring = false, error = "Final scoring failed")
             }
         }
     }
@@ -139,6 +165,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun newGame() {
         fetchJob?.cancel()
         pendingFreePly = false
+        gameSeq++
+        viewModelScope.launch { updatePlayerRankText() }
         val playerColor = resolveColor(_state.value.colorChoice)
         _state.value = syncBoard(
             _state.value.copy(
@@ -148,6 +176,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 finalScoreLead = null, finalOwnership = null, scoring = false,
                 winrateHistory = emptyList(), status = "playing", passing = 0,
                 isThinking = false, error = null, reviewIdx = null,
+                undoUsed = false,
             )
         )
         // Reset the persistent engine board first (GTP tree starts fresh), then
@@ -176,24 +205,52 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         worst: Int,
         color: ColorChoice,
         feedback: Boolean,
+        difficulty: Difficulty,
+        targetWinrate: Int,
     ) {
         val b = best.coerceIn(0, 5)
         val w = worst.coerceIn(0, 5)
+        val t = targetWinrate.coerceIn(10, 90)
         viewModelScope.launch {
-            settings.setRank(rank)
             settings.setMultipleChoice(multipleChoice)
             settings.setBestCount(b)
             settings.setWorstCount(w)
             settings.setColorChoice(color)
             settings.setShowFeedback(feedback)
+            settings.setDifficulty(difficulty)
+            settings.setTargetWinrate(t)
+            // Automatch overrides the draft rung: nearest rung to the target
+            // winrate off the live player rating. The pick persists as the
+            // rung, so reopening the sheet in Fixed shows what was played.
+            var picked = rank
+            var predicted: Double? = null
+            if (difficulty == Difficulty.AUTOMATCH) {
+                val rating = PlayerRating.rate(settings.ratedHistory.first())
+                val rung = GameFlow.automatchRung(rating.rating, t)
+                picked = Rank.ALL[rung]
+                predicted = Glicko2.expectedScore(rating, BotRatings.forRank(picked), BotRatings.BOT_RD)
+            }
+            settings.setRank(picked)
+            pendingFreePly = false
+            _state.value = _state.value.copy(
+                rank = picked, multipleChoice = multipleChoice,
+                bestCount = b, worstCount = w,
+                colorChoice = color, showFeedback = feedback,
+                difficulty = difficulty, targetWinrate = t,
+                predictedWinrate = predicted,
+            )
+            updatePlayerRankText()
+            newGame()
         }
-        pendingFreePly = false
+    }
+
+    /** Live player rank text (rating folds are milliseconds; recompute freely). */
+    private suspend fun updatePlayerRankText() {
+        val r = PlayerRating.rate(settings.ratedHistory.first())
+        val dev = BotRatings.rankDeviation(r.rating, r.rd).roundToInt()
         _state.value = _state.value.copy(
-            rank = rank, multipleChoice = multipleChoice,
-            bestCount = b, worstCount = w,
-            colorChoice = color, showFeedback = feedback,
+            playerRankText = "${BotRatings.playerLabel(r.rating, r.rd)} ±$dev",
         )
-        newGame()
     }
 
     fun setGraphOpen(v: Boolean) {
@@ -225,6 +282,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun pass() {
         val s = _state.value
         if (s.status != "playing" || s.reviewIdx != null) return
+        if (s.toMove == s.playerColor) appendRatedRecord(s)
         val p = s.passing + 1
         if (p >= 2) {
             _state.value = s.copy(status = "finished", passing = p, candidates = null)
@@ -266,6 +324,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = syncBoard(
             s.copy(
                 history = hist.toList(), toMove = s.playerColor, candidates = null, evaluations = null,
+                undoUsed = true,
                 pastCandidates = s.pastCandidates.filterKeys { it < lastPlayerIdx },
                 pastEvals = s.pastEvals.filterKeys { it < lastPlayerIdx },
                 finalScoreLead = null, finalOwnership = null, scoring = false,
@@ -315,8 +374,22 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         applyPlayerMove(x, y, cand ?: was.first())
     }
 
+    /**
+     * Write-ahead loss record on the player's first ply of a rated
+     * (free-choice) game. Abandons need no end-of-game hook: the loss is
+     * already stored; clean finishes upgrade it (see requestFinalScore).
+     */
+    private fun appendRatedRecord(s: GameState) {
+        if (!GameFlow.ratedAppendWanted(s.multipleChoice, s.status, s.history, s.playerColor)) return
+        val rec = RatedGame(
+            System.currentTimeMillis(), s.rank.id, s.playerColor == 1, 0.0,
+        )
+        viewModelScope.launch { settings.appendRated(rec) }
+    }
+
     private fun applyPlayerMove(x: Int, y: Int, picked: com.gotrainer.nine.game.Candidate?) {
         val s = _state.value
+        appendRatedRecord(s)
         val was = s.candidates
         val evals = if (was != null && s.choiceCount != 0) CandidateSelector.toEvaluated(was) else s.evaluations
         val hist = s.history + MoveRec(x, y, s.playerColor, picked, null)

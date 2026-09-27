@@ -12,6 +12,8 @@ You play Black or White. You select rank from 30k to 9d. Rank steers the human m
 
 The winrate graph records each move. The graph also works as a review slider. Drag the graph to review past positions. Two passes end the game. The engine then scores the board.
 
+Free-choice games are rated (Glicko-2, OGS scale from 30k). Your rank and uncertainty show in the setup sheet; the chart icon opens the stats screen with your rating history. Automatch picks the bot rung nearest your target winrate.
+
 ## Training styles
 
 The setup sheet selects style and move count. Move count is 3, 5, or free choice. Style sets the mix of good moves and tempting errors. Feedback color marks each group.
