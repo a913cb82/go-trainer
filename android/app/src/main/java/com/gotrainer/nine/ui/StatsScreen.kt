@@ -142,13 +142,16 @@ private fun RatingGraph(
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = onSurface)
     val dateFmt = remember { SimpleDateFormat("M/d", Locale.US) }
-    // Game 0 is the 30k start every trajectory climbs from; the band covers
-    // played games only (the start's ±12 ranks would flatten the axis).
+    // Game 0 is the 30k start every trajectory climbs from. Uncertainty
+    // covers every point including game 0 — but game 0's ±12 ranks must not
+    // stretch the axis: limits come from played games only, and yOf coerces
+    // the band into them (it clips at the chart edge, which is the honest
+    // picture: early uncertainty runs off the scale).
     val display = remember(traj) { listOf(PlayerRating.START) + traj }
     val ranks = display.map { BotRatings.ratingToRank(it.rating) }
-    val uppers = traj.map { BotRatings.ratingToRank(it.rating + it.rd) }
-    val lowers = traj.map { BotRatings.ratingToRank(it.rating - it.rd) }
-    val ticks = remember(ranks) { rankAxisTicks(lowers.min(), uppers.max()) }
+    val uppers = display.map { BotRatings.ratingToRank(it.rating + it.rd) }
+    val lowers = display.map { BotRatings.ratingToRank(it.rating - it.rd) }
+    val ticks = remember(ranks) { rankAxisTicks(lowers.drop(1).min(), uppers.drop(1).max()) }
     val xVals: List<Float> = remember(history, xMode) {
         if (xMode == StatsX.GAMES) {
             display.indices.map { it.toFloat() / history.size }
@@ -167,13 +170,13 @@ private fun RatingGraph(
         val hi = ticks.last().toFloat().takeIf { it > lo } ?: (lo + 1)
         fun yOf(rank: Double): Float = h - ((rank.coerceIn(lo.toDouble(), hi.toDouble()) - lo) / (hi - lo)).toFloat() * h
         fun xOf(t: Float): Float = left + t * w
-        // Uncertainty band over played games (game i plots at xVals[i + 1]).
+        // Uncertainty band over all points (display aligns with xVals).
         val band = Path().apply {
             uppers.forEachIndexed { i, u ->
-                val x = xOf(xVals[i + 1]); val y = yOf(u)
+                val x = xOf(xVals[i]); val y = yOf(u)
                 if (i == 0) moveTo(x, y) else lineTo(x, y)
             }
-            for (i in lowers.indices.reversed()) lineTo(xOf(xVals[i + 1]), yOf(lowers[i]))
+            for (i in lowers.indices.reversed()) lineTo(xOf(xVals[i]), yOf(lowers[i]))
             close()
         }
         drawPath(band, accent.copy(alpha = 0.15f))
