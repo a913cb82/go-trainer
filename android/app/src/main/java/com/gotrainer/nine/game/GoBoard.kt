@@ -172,5 +172,22 @@ class GoBoard(val size: Int = 9) {
 
         fun fromHistory(history: List<MoveRec>, size: Int = 9): GoBoard =
             replay(history, size).board
+
+        /**
+         * Stones present in [before] but gone in [after], with their color —
+         * i.e. what the last play captured. Pure board diff; placement shows
+         * as added, undo restorations as added, so only real plays pop.
+         */
+        fun capturedBy(
+            before: List<List<Int>>,
+            after: List<List<Int>>,
+        ): List<CapturedStone> {
+            val out = mutableListOf<CapturedStone>()
+            for (y in before.indices) for (x in before[y].indices) {
+                val v = before[y][x]
+                if (v != 0 && after[y][x] == 0) out.add(CapturedStone(x, y, v))
+            }
+            return out
+        }
     }
 }

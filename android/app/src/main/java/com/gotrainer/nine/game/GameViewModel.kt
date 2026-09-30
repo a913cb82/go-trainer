@@ -160,8 +160,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (playerColor == 1) w else 1.0 - w
 
 
-    private fun syncBoard(s: GameState): GameState =
-        s.copy(boardSignMap = GoBoard.fromHistory(s.history).signMap())
+    private fun syncBoard(s: GameState, fx: CaptureFx? = null): GameState =
+        s.copy(boardSignMap = GoBoard.fromHistory(s.history).signMap(), captureFx = fx)
+
+    /** Pop payload for a real placement: diff the board, null when nothing was taken. */
+    private fun captureFxFor(before: List<List<Int>>, hist: List<MoveRec>): CaptureFx? =
+        GoBoard.capturedBy(before, GoBoard.fromHistory(hist).signMap())
+            .takeIf { it.isNotEmpty() }
+            ?.let { CaptureFx(it, hist.size) }
 
     // ---- actions ----
     /** One-shot engine scoring after pass-pass; chip shows "scoring…" meanwhile. */
@@ -314,7 +320,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setReviewIdx(v: Int?) {
-        _state.value = _state.value.copy(reviewIdx = v)
+        _state.value = _state.value.copy(reviewIdx = v, captureFx = null)
     }
 
     fun clearEvaluations() {
@@ -453,7 +459,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 evaluations = evals,
                 pastEvals = pastEvals,
                 winrateHistory = s.winrateHistory + win,
-            )
+            ),
+            fx = captureFxFor(s.boardSignMap, hist),
         )
         // Sync the move into the persistent engine board, then reply immediately
         // (no UI delay — BadukAI has none; the visit+time caps bound the reply).
@@ -518,7 +525,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                                 isThinking = false,
                                 winrateHistory = winrates,
                                 pendingFreePly = moveStep.pendingFreePly,
-                            )
+                            ),
+                            fx = captureFxFor(cur.boardSignMap, hist),
                         )
                     }
                 }

@@ -31,6 +31,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -187,6 +190,22 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     } else {
         if (s.choiceCount == 0) null else s.candidates
     }
+    // Capture pop: a 200 ms visual overlay keyed on the play's fx payload.
+    // Game state moves on instantly (bot replies, undo, review all cut it by
+    // replacing/clearing fx); this clock draws pixels and nothing else.
+    val fx = if (reviewing) null else s.captureFx
+    var fxVisible by remember { mutableStateOf(false) }
+    val fxProgress = remember { Animatable(1f) }
+    LaunchedEffect(fx) {
+        if (fx == null) {
+            fxVisible = false
+        } else {
+            fxVisible = true
+            fxProgress.snapTo(0f)
+            fxProgress.animateTo(1f, animationSpec = tween(200, easing = LinearEasing))
+            fxVisible = false
+        }
+    }
     val boardEvals: List<EvaluatedMove>? = if (rIdx != null) {
         if (!s.showFeedback) {
             null
@@ -290,6 +309,8 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 feedbackMove = feedbackMove,
                 onVertexClick = actions.onBoardTap,
                 modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+                popStones = if (fxVisible) fx?.stones ?: emptyList() else emptyList(),
+                popProgress = fxProgress.value,
             )
 
             // Feedback scope — only while playing with feedback to scope.

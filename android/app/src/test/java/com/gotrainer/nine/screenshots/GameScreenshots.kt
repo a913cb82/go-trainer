@@ -258,6 +258,31 @@ class GameScreenshots {
         )
     }
 
+    @Test
+    fun s15_pop() {
+        // Capture pop frozen mid-collapse: Black just took two White stones.
+        snap("15_pop") {
+            Surface {
+                com.gotrainer.nine.ui.BoardView(
+                    boardSignMap = boardWith(
+                        Triple(3, 3, 1), Triple(5, 3, 1), Triple(4, 2, 1),
+                        Triple(3, 4, 1), Triple(5, 4, 1), Triple(4, 5, 1),
+                    ),
+                    candidates = null,
+                    evaluations = null,
+                    lastMove = 4 to 5,
+                    feedbackMove = null,
+                    onVertexClick = { _, _ -> },
+                    popStones = listOf(
+                        com.gotrainer.nine.game.CapturedStone(4, 3, -1),
+                        com.gotrainer.nine.game.CapturedStone(4, 4, -1),
+                    ),
+                    popProgress = 0.55f,
+                )
+            }
+        }
+    }
+
 }
 
 class SetupScreenshots {
@@ -289,7 +314,6 @@ class SetupScreenshots {
         }
     }
 
-    @Test
     fun s13_downloading() {
         snap("13_downloading") {
             com.gotrainer.nine.ui.SetupScreen(

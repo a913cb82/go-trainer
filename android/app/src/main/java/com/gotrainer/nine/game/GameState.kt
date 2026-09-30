@@ -33,6 +33,16 @@ data class MoveRec(
     val gap: Double? = null,
 )
 
+/** One stone removed by the last play, for the pop overlay. */
+data class CapturedStone(val x: Int, val y: Int, val color: Int)
+
+/**
+ * TRANSIENT pop-animation payload: stones the last real play captured.
+ * Never persisted (the serde skips it); any next action clears it, so the
+ * overlay can never queue up or hold up a turn.
+ */
+data class CaptureFx(val stones: List<CapturedStone>, val seq: Int)
+
 data class GameState(
     val boardSignMap: List<List<Int>> = List(9) { List(9) { 0 } },
     val history: List<MoveRec> = emptyList(),
@@ -86,6 +96,8 @@ data class GameState(
     val playerRankText: String = "30k? ±12",
     /** Live player μ for the automatch preview; defaults to the 30k start. */
     val playerRating: Double = BotRatings.START_RATING,
+    /** Pop overlay for the last play's captures; transient, never persisted. */
+    val captureFx: CaptureFx? = null,
 ) {
     /** Moves offered per turn: best + worst while multiple-choice is on, else 0. */
     val choiceCount: Int get() = if (!multipleChoice) 0 else bestCount + worstCount

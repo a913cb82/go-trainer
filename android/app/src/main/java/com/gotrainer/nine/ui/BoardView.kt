@@ -16,8 +16,10 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.gotrainer.nine.game.Candidate
+import com.gotrainer.nine.game.CapturedStone
 import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GapStyle
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 private val WOOD = Color(0xFFE8C07A)
@@ -41,6 +43,10 @@ fun BoardView(
     feedbackMove: Pair<Int, Int>?,
     onVertexClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** Captured stones mid-pop (empty points now); purely visual overlay. */
+    popStones: List<CapturedStone> = emptyList(),
+    /** 0 = swell start, 1 = gone; driven by the parent's 200 ms clock. */
+    popProgress: Float = 1f,
 ) {
     Canvas(
         modifier = modifier
@@ -87,18 +93,37 @@ fun BoardView(
             }
         }
         // stones with shadow
+        fun stoneAt(x: Int, y: Int, v: Int, scale: Float = 1f, alpha: Float = 1f) {
+            if (scale <= 0f || alpha <= 0f) return
+            val c = Offset(cx(x), cy(y))
+            drawCircle(Color.Black.copy(alpha = 0.25f * alpha), radius = cell * 0.46f * scale, center = Offset(c.x + 2f, c.y + 3f))
+            if (v == 1) {
+                drawCircle(Color(0xFF111111).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c)
+                drawCircle(Color(0xFF3A3A3A).copy(alpha = alpha), radius = cell * 0.13f * scale, center = Offset(c.x - cell * 0.12f, c.y - cell * 0.12f))
+            } else {
+                drawCircle(Color(0xFFFDf8EC).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c)
+                drawCircle(Color(0xFF8A7040).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c, style = Stroke(width = 2f))
+            }
+        }
         for (y in 0 until 9) for (x in 0 until 9) {
             val v = boardSignMap[y][x]
             if (v == 0) continue
-            val c = Offset(cx(x), cy(y))
-            drawCircle(Color.Black.copy(alpha = 0.25f), radius = cell * 0.46f, center = Offset(c.x + 2f, c.y + 3f))
-            if (v == 1) {
-                drawCircle(Color(0xFF111111), radius = cell * 0.44f, center = c)
-                drawCircle(Color(0xFF3A3A3A), radius = cell * 0.13f, center = Offset(c.x - cell * 0.12f, c.y - cell * 0.12f))
+            stoneAt(x, y, v)
+        }
+        // capture pop overlay: synchronized swell (first 30%, ease-out) then
+        // ease-out collapse into a fade (~200 ms total, same curve as the demo).
+        // The logical board already moved on — this draws nothing but pixels.
+        if (popStones.isNotEmpty() && popProgress < 1f) {
+            val u = popProgress.coerceIn(0f, 1f)
+            val (scale, alpha) = if (u < 0.3f) {
+                val k = u / 0.3f
+                (1f + 0.15f * (1f - (1f - k) * (1f - k) * (1f - k))) to 1f
             } else {
-                drawCircle(Color(0xFFFDf8EC), radius = cell * 0.44f, center = c)
-                drawCircle(Color(0xFF8A7040), radius = cell * 0.44f, center = c, style = Stroke(width = 2f))
+                val k = (u - 0.3f) / 0.7f
+                val e = 1f - (1f - k) * (1f - k) * (1f - k)
+                max(1.15f * (1f - e), 0f) to (1f - k * k)
             }
+            for (st in popStones) stoneAt(st.x, st.y, st.color, scale, alpha)
         }
         // last-move ring — skipped ONLY when a feedback halo is actually drawn at
         // that point (the halo is what would collide). In free-choice review the
