@@ -72,6 +72,12 @@ data class GameState(
     val finalOwnership: List<List<Double>>? = null,
     /** Any undo this game: poisons the rated-game upgrade (stays a loss). */
     val undoUsed: Boolean = false,
+    /**
+     * The last appended winrate point is a free-choice placeholder waiting
+     * for the bot's root appraisal of the same board. Part of game state
+     * (not a VM transient) so abandon accounting survives process death.
+     */
+    val pendingFreePly: Boolean = false,
     /** Fixed rung vs automatch-to-target-winrate. */
     val difficulty: Difficulty = Difficulty.FIXED,
     /** Automatch target winrate percent (10-90). */

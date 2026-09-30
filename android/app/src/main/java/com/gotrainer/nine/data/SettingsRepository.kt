@@ -34,6 +34,8 @@ class SettingsRepository(private val appContext: Context) {
         // Rated-game history (free-choice games only); player rating is a
         // fold over this list, never stored. See PlayerRating.
         private val RATED_HISTORY = stringPreferencesKey("rated_history")
+        // Whole-game snapshot (GameStateSerde); restored on cold start.
+        private val SAVED_GAME = stringPreferencesKey("saved_game")
 
         // Legacy keys (0/3/5 + strategy presets), kept for one-time migration.
         private val LEGACY_N = intPreferencesKey("n")
@@ -99,6 +101,14 @@ class SettingsRepository(private val appContext: Context) {
     /** Clear all rated games (stats-screen reset; rank returns to 30k). */
     suspend fun clearRated() {
         appContext.settingsStore.edit { it[RATED_HISTORY] = "" }
+    }
+
+    /** Latest game snapshot, if any. Corrupt blobs read as null (fresh game). */
+    val savedGame: Flow<String?> = appContext.settingsStore.data.map { p -> p[SAVED_GAME] }
+
+    /** Overwrite the game snapshot (called on every state change; cheap). */
+    suspend fun saveGame(blob: String) {
+        appContext.settingsStore.edit { it[SAVED_GAME] = blob }
     }
 
     /** Void the pending record when the engine count fails (errors, never losses). */

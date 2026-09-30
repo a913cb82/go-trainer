@@ -36,12 +36,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val katago = KataGoGtpEngine(app.applicationContext)
     private var fetchJob: Job? = null
     /**
-     * True when the last appended winrate point is a free-choice placeholder
-     * (carry-forward) waiting for the bot's root appraisal of the same board.
-     * Cleared on new game / undo / setup, consumed in [botReply].
-     */
-    private var pendingFreePly = false
-    /**
      * Game generation: incremented on newGame so a late engine score from a
      * previous game can neither upgrade nor void the current game's rated
      * record (single active game => last-record ops are safe within a gen).
@@ -56,24 +50,50 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             val s = settings.settings.first()
-            _state.value = _state.value.copy(
-                rank = s.rank,
-                multipleChoice = s.multipleChoice,
-                bestCount = s.bestCount,
-                worstCount = s.worstCount,
-                colorChoice = s.colorChoice,
-                playerColor = resolveColor(s.colorChoice),
-                showFeedback = s.showFeedback,
-                graphOpen = s.graphOpen,
-                difficulty = s.difficulty,
-                targetWinrate = s.targetWinrate,
-            )
+            // Cold start resumes the saved game exactly (board rebuilds from
+            // history); corrupt or absent blobs start fresh from settings.
+            val restored = settings.savedGame.first()?.let { GameStateSerde.decode(it) }
+            if (restored != null) {
+                _state.value = syncBoard(
+                    restored.copy(isThinking = false, scoring = false, error = null)
+                )
+            } else {
+                _state.value = _state.value.copy(
+                    rank = s.rank,
+                    multipleChoice = s.multipleChoice,
+                    bestCount = s.bestCount,
+                    worstCount = s.worstCount,
+                    colorChoice = s.colorChoice,
+                    playerColor = resolveColor(s.colorChoice),
+                    showFeedback = s.showFeedback,
+                    graphOpen = s.graphOpen,
+                    difficulty = s.difficulty,
+                    targetWinrate = s.targetWinrate,
+                )
+            }
             updatePlayerRankText()
+            // Every state change persists (cheap blob); launched after the
+            // restore so the first emission writes back the restored game.
+            viewModelScope.launch {
+                _state.collect { settings.saveGame(GameStateSerde.encode(it)) }
+            }
             // On-device mode needs the staged binary; remote mode needs nothing local.
             if (!katago.binaryPresent()) {
                 _state.value = _state.value.copy(
                     error = "KataGo engine not found — push libkatago.so, models and gtp.cfg to the app filesDir",
                 )
+                return@launch
+            }
+            val resumed = restored != null
+            val cur = _state.value
+            // Resumed games pick up exactly where they died: finished games
+            // recount only when the kill beat the score (the write-ahead loss
+            // is already in history, so scoring still settles it); live games
+            // re-issue whichever engine query was in flight (bot reply, or
+            // candidates the human never saw). A kill mid-game is an abandon:
+            // the pending record stays a loss, undo poison stays poisoned.
+            if (resumed && cur.status == "finished") {
+                if (cur.finalScoreLead == null) requestFinalScore()
                 return@launch
             }
             // Background preload while the human thinks: a cold start (process
@@ -82,8 +102,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             // reply self-starts the engine with the thinking bar shown.
             // The first query shares the same start mutex, so exactly one
             // engine spawns.
+            val humanToMove = cur.toMove == cur.playerColor
             if (GameFlow.preloadWanted(
-                    humanToMove = _state.value.playerColor == 1,
+                    humanToMove = humanToMove,
                     engineReady = katago.engineReady.value,
                 )
             ) {
@@ -95,12 +116,32 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
-            // The opener delegates to GameFlow so the White-second path is
-            // testable; behaviour is unchanged (candidates are always
-            // requested, so the bot never opens for White).
-            when (GameFlow.openingAction(_state.value.playerColor)) {
-                GameFlow.OpeningAction.REQUEST_CANDIDATES -> requestCandidates()
-                GameFlow.OpeningAction.BOT_REPLY -> botReply()
+            if (!resumed) {
+                // The opener delegates to GameFlow so the White-second path is
+                // testable; behaviour is unchanged (candidates are always
+                // requested, so the bot never opens for White).
+                when (GameFlow.openingAction(_state.value.playerColor)) {
+                    GameFlow.OpeningAction.REQUEST_CANDIDATES -> requestCandidates()
+                    GameFlow.OpeningAction.BOT_REPLY -> botReply()
+                }
+                return@launch
+            }
+            // The persistent engine board died with the process: replay the
+            // moves back in, then re-issue the in-flight query. Bails if the
+            // user started a new game while the engine was still warming.
+            val seq = gameSeq
+            viewModelScope.launch {
+                try {
+                    engine().newGame(cur.rank)
+                    for (m in cur.history) engine().playMove(m.color, m.x, m.y)
+                } catch (e: Exception) {
+                    Log.e(TAG, "engine resync failed", e)
+                    _state.value = _state.value.copy(error = e.message ?: "Engine error")
+                    return@launch
+                }
+                if (seq != gameSeq) return@launch
+                if (cur.toMove != cur.playerColor) botReply()
+                else if (cur.choiceCount != 0 && cur.candidates == null) requestCandidates()
             }
         }
     }
@@ -164,7 +205,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newGame() {
         fetchJob?.cancel()
-        pendingFreePly = false
         gameSeq++
         viewModelScope.launch { updatePlayerRankText() }
         val playerColor = resolveColor(_state.value.colorChoice)
@@ -176,7 +216,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 finalScoreLead = null, finalOwnership = null, scoring = false,
                 winrateHistory = emptyList(), status = "playing", passing = 0,
                 isThinking = false, error = null, reviewIdx = null,
-                undoUsed = false,
+                undoUsed = false, pendingFreePly = false,
             )
         )
         // Reset the persistent engine board first (GTP tree starts fresh), then
@@ -229,8 +269,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 picked = Rank.ALL[rung]
             }
             settings.setRank(picked)
-            pendingFreePly = false
             _state.value = _state.value.copy(
+                pendingFreePly = false,
                 rank = picked, multipleChoice = multipleChoice,
                 bestCount = b, worstCount = w,
                 colorChoice = color, showFeedback = feedback,
@@ -299,10 +339,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val hist = s.history + MoveRec(-1, -1, s.toMove)
         // The carried-forward point is a placeholder: the bot's root appraises
         // this exact board moments later and backfills it (see botReply).
-        pendingFreePly = true
         _state.value = syncBoard(
             s.copy(
                 history = hist, toMove = -s.toMove, passing = p, candidates = null,
+                pendingFreePly = true,
                 winrateHistory = GameFlow.humanPassWinrates(s.winrateHistory),
             )
         )
@@ -326,10 +366,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val undone = s.history.size - lastPlayerIdx
         val removedPlies = undone
         val hist = s.history.subList(0, lastPlayerIdx)
-        pendingFreePly = false
         _state.value = syncBoard(
             s.copy(
                 history = hist.toList(), toMove = s.playerColor, candidates = null, evaluations = null,
+                pendingFreePly = false,
                 undoUsed = true,
                 pastCandidates = s.pastCandidates.filterKeys { it < lastPlayerIdx },
                 pastEvals = s.pastEvals.filterKeys { it < lastPlayerIdx },
@@ -405,11 +445,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         // board moments later and backfills it (same search, zero extra latency).
         // A fabricated 0.5 made the graph read 50% on every black move.
         val win = picked?.strongWinrate ?: (s.winrateHistory.lastOrNull() ?: 0.5)
-        pendingFreePly = picked == null
         val pastEvals = if (evals != null && s.choiceCount != 0) s.pastEvals + (s.history.size to evals) else s.pastEvals
         _state.value = syncBoard(
             s.copy(
                 history = hist, toMove = -s.playerColor, passing = 0, candidates = null,
+                pendingFreePly = picked == null,
                 evaluations = evals,
                 pastEvals = pastEvals,
                 winrateHistory = s.winrateHistory + win,
@@ -445,16 +485,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     val p = cur.passing + 1
                     val hist = cur.history + MoveRec(-1, -1, cur.toMove)
                     // Even when the bot passes, its root appraises our last move.
-                    val passStep = GameFlow.botReplyWinrates(cur.winrateHistory, pendingFreePly, prevW, 0.0, botPassed = true)
-                    pendingFreePly = passStep.pendingFreePly
+                    val passStep = GameFlow.botReplyWinrates(cur.winrateHistory, cur.pendingFreePly, prevW, 0.0, botPassed = true)
                     val winrates = passStep.winrates
                     _state.value = if (p >= 2) {
-                        val done = syncBoard(cur.copy(history = hist, status = "finished", passing = p, isThinking = false, winrateHistory = winrates))
+                        val done = syncBoard(cur.copy(history = hist, status = "finished", passing = p, isThinking = false, winrateHistory = winrates, pendingFreePly = passStep.pendingFreePly))
                         _state.value = done
                         requestFinalScore()
                         return@launch
                     } else {
-                        val next = syncBoard(cur.copy(history = hist, toMove = -cur.toMove, passing = p, isThinking = false, winrateHistory = winrates))
+                        val next = syncBoard(cur.copy(history = hist, toMove = -cur.toMove, passing = p, isThinking = false, winrateHistory = winrates, pendingFreePly = passStep.pendingFreePly))
                         _state.value = next
                         requestCandidates()
                         return@launch
@@ -471,14 +510,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         val hist = cur.history + MoveRec(res.x, res.y, cur.toMove)
                         // Backfill a free-choice placeholder with the root appraisal,
                         // then append the played-move appraisal for the bot's ply.
-                        val moveStep = GameFlow.botReplyWinrates(cur.winrateHistory, pendingFreePly, prevW, playedW, botPassed = false)
-                        pendingFreePly = moveStep.pendingFreePly
+                        val moveStep = GameFlow.botReplyWinrates(cur.winrateHistory, cur.pendingFreePly, prevW, playedW, botPassed = false)
                         val winrates = moveStep.winrates
                         _state.value = syncBoard(
                             cur.copy(
                                 history = hist, toMove = -cur.toMove, passing = 0,
                                 isThinking = false,
                                 winrateHistory = winrates,
+                                pendingFreePly = moveStep.pendingFreePly,
                             )
                         )
                     }
