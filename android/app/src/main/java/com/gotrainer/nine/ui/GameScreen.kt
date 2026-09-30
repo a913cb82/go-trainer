@@ -74,8 +74,8 @@ data class GameActions(
     val onScopeAll: (Boolean) -> Unit = {},
     val onGraphOpen: (Boolean) -> Unit = {},
     val onReview: (Int?) -> Unit = {},
-    val onApplySetup: (Rank, Boolean, Int, Int, ColorChoice, Boolean, Difficulty, Int) -> Unit =
-        { _, _, _, _, _, _, _, _ -> },
+    val onApplySetup: (Rank, Boolean, Int, Int, ColorChoice, Boolean, Difficulty, Int, Boolean) -> Unit =
+        { _, _, _, _, _, _, _, _, _ -> },
     val onShowStats: () -> Unit = {},
     val onOpenSetup: () -> Unit = {},
 )
@@ -95,6 +95,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     var draftWorst by remember { mutableStateOf(s.worstCount) }
     var draftColor by remember { mutableStateOf(s.colorChoice) }
     var draftFeedback by remember { mutableStateOf(s.showFeedback) }
+    var draftRanked by remember { mutableStateOf(s.ranked) }
     var draftDifficulty by remember { mutableStateOf(s.difficulty) }
     var draftTargetWinrate by remember { mutableStateOf(s.targetWinrate) }
     fun openSetup() {
@@ -104,6 +105,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
         draftWorst = s.worstCount
         draftColor = s.colorChoice
         draftFeedback = s.showFeedback
+        draftRanked = s.ranked
         draftDifficulty = s.difficulty
         draftTargetWinrate = s.targetWinrate
         showSetup = true
@@ -138,6 +140,8 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
             onDraftColor = { draftColor = it },
             draftFeedback = draftFeedback,
             onDraftFeedback = { draftFeedback = it },
+            draftRanked = draftRanked,
+            onDraftRanked = { draftRanked = it },
             draftDifficulty = draftDifficulty,
             onDraftDifficulty = { draftDifficulty = it },
             draftTargetWinrate = draftTargetWinrate,
@@ -147,6 +151,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
                 vm.applySetup(
                     draftRank, draftMultipleChoice, draftBest, draftWorst,
                     draftColor, draftFeedback, draftDifficulty, draftTargetWinrate,
+                    draftRanked,
                 )
                 showSetup = false
             },

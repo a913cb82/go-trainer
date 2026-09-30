@@ -72,16 +72,19 @@ object GameFlow {
     // ---- rated games (free-choice only; suggestions games leave no trace) ----
 
     /**
-     * Whether this player ply writes the ahead-loss record: a rated game in
-     * progress and the player's first ply (stone or pass).
+     * Whether this player ply writes the ahead-loss record: a ranked,
+     * actually-free-choice game in progress and the player's first ply
+     * (stone or pass). Suggestions games (choiceCount > 0) never rate, even
+     * opted in; opted-out free games leave no trace either.
      */
     fun ratedAppendWanted(
-        multipleChoice: Boolean,
+        ranked: Boolean,
+        choiceCount: Int,
         status: String,
         history: List<MoveRec>,
         playerColor: Int,
     ): Boolean =
-        !multipleChoice && status == "playing" &&
+        ranked && choiceCount == 0 && status == "playing" &&
             history.none { it.color == playerColor }
 
     /**

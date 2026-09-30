@@ -83,4 +83,13 @@ class GameStateSerdeTest {
         assertNull(GameStateSerde.decode(GameStateSerde.encode(midGame()).split("\n").take(3).joinToString("\n")))
         assertNull(GameStateSerde.decode(GameStateSerde.encode(midGame()).replace("0.55", "xyz")))
     }
+
+    @Test fun `pre-ranked 20-field blobs decode as ranked`() {
+        val blob = GameStateSerde.encode(midGame().copy(ranked = false))
+        val legacy = blob.split("\n").let { lines ->
+            (listOf(lines[0]) + listOf(lines[1].split(",").dropLast(1).joinToString(",")) + lines.drop(2)).joinToString("\n")
+        }
+        assertEquals(20, legacy.split("\n")[1].split(",").size)
+        assertEquals(true, GameStateSerde.decode(legacy)!!.ranked)
+    }
 }

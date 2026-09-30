@@ -66,6 +66,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     colorChoice = s.colorChoice,
                     playerColor = resolveColor(s.colorChoice),
                     showFeedback = s.showFeedback,
+                    ranked = s.ranked,
                     graphOpen = s.graphOpen,
                     difficulty = s.difficulty,
                     targetWinrate = s.targetWinrate,
@@ -189,8 +190,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         scoring = false,
                     )
                     // Clean rated finish upgrades the write-ahead loss (win=1,
-                    // draw=0.5); undos, losses and suggestions games stay losses.
-                    if (!cur.multipleChoice && cur.history.any { it.color == cur.playerColor }) {
+                    // draw=0.5); undos, losses, unranked and suggestions games
+                    // stay losses (or never wrote a record at all).
+                    if (cur.ranked && cur.choiceCount == 0 && cur.history.any { it.color == cur.playerColor }) {
                         val upgrade = GameFlow.ratedFinishScore(
                             res.scoreLeadBlack, cur.playerColor == 1, cur.undoUsed, playerMoved = true,
                         )
@@ -253,6 +255,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         feedback: Boolean,
         difficulty: Difficulty,
         targetWinrate: Int,
+        ranked: Boolean,
     ) {
         val b = best.coerceIn(0, 5)
         val w = worst.coerceIn(0, 5)
@@ -263,6 +266,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             settings.setWorstCount(w)
             settings.setColorChoice(color)
             settings.setShowFeedback(feedback)
+            settings.setRanked(ranked)
             settings.setDifficulty(difficulty)
             settings.setTargetWinrate(t)
             // Automatch overrides the draft rung: nearest rung to the target
@@ -281,6 +285,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 bestCount = b, worstCount = w,
                 colorChoice = color, showFeedback = feedback,
                 difficulty = difficulty, targetWinrate = t,
+                // Belt and braces: a ranked opt-in only counts when the game
+                // is actually free play; suggestions force unrated at Start.
+                ranked = ranked && (!multipleChoice || (b + w) == 0),
             )
             updatePlayerRankText()
             newGame()
@@ -432,7 +439,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * already stored; clean finishes upgrade it (see requestFinalScore).
      */
     private fun appendRatedRecord(s: GameState) {
-        if (!GameFlow.ratedAppendWanted(s.multipleChoice, s.status, s.history, s.playerColor)) return
+        if (!GameFlow.ratedAppendWanted(s.ranked, s.choiceCount, s.status, s.history, s.playerColor)) return
         val rec = RatedGame(
             System.currentTimeMillis(), s.rank.id, s.playerColor == 1, 0.0,
         )

@@ -24,6 +24,7 @@ class SettingsRepository(private val appContext: Context) {
     companion object {
         private val RANK = stringPreferencesKey("rank")
         private val MULTIPLE_CHOICE = booleanPreferencesKey("multiple_choice")
+        private val RANKED = booleanPreferencesKey("ranked")
         private val BEST_COUNT = intPreferencesKey("best_count")
         private val WORST_COUNT = intPreferencesKey("worst_count")
         private val COLOR = stringPreferencesKey("color")
@@ -49,6 +50,7 @@ class SettingsRepository(private val appContext: Context) {
         val worstCount: Int = 3,
         val colorChoice: ColorChoice = ColorChoice.BLACK,
         val showFeedback: Boolean = true,
+        val ranked: Boolean = true,
         val graphOpen: Boolean = true,
         val difficulty: Difficulty = Difficulty.FIXED,
         /** Target winrate percent for automatch (10-90). */
@@ -72,6 +74,7 @@ class SettingsRepository(private val appContext: Context) {
             worstCount = (worst ?: migrated?.third ?: 3).coerceIn(0, 5),
             colorChoice = ColorChoice.fromId(p[COLOR] ?: "black"),
             showFeedback = p[SHOW_FEEDBACK] ?: true,
+            ranked = p[RANKED] ?: true,
             graphOpen = p[GRAPH_OPEN] ?: true,
             difficulty = Difficulty.fromId(p[DIFFICULTY] ?: "fixed"),
             targetWinrate = (p[TARGET_WINRATE] ?: 50).coerceIn(10, 90),
@@ -134,6 +137,7 @@ class SettingsRepository(private val appContext: Context) {
     suspend fun setWorstCount(v: Int) = appContext.settingsStore.edit { it[WORST_COUNT] = v.coerceIn(0, 5) }
     suspend fun setColorChoice(c: ColorChoice) = appContext.settingsStore.edit { it[COLOR] = c.id }
     suspend fun setShowFeedback(v: Boolean) = appContext.settingsStore.edit { it[SHOW_FEEDBACK] = v }
+    suspend fun setRanked(v: Boolean) = appContext.settingsStore.edit { it[RANKED] = v }
     suspend fun setGraphOpen(v: Boolean) = appContext.settingsStore.edit { it[GRAPH_OPEN] = v }
     suspend fun setDifficulty(d: Difficulty) = appContext.settingsStore.edit { it[DIFFICULTY] = d.id }
     suspend fun setTargetWinrate(v: Int) = appContext.settingsStore.edit { it[TARGET_WINRATE] = v.coerceIn(10, 90) }

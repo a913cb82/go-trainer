@@ -98,6 +98,11 @@ data class GameState(
     val playerRating: Double = BotRatings.START_RATING,
     /** Pop overlay for the last play's captures; transient, never persisted. */
     val captureFx: CaptureFx? = null,
+    /**
+     * The player opted into rating. Effective only when the game is actually
+     * free play ([choiceCount] == 0); suggestions games are always unrated.
+     */
+    val ranked: Boolean = true,
 ) {
     /** Moves offered per turn: best + worst while multiple-choice is on, else 0. */
     val choiceCount: Int get() = if (!multipleChoice) 0 else bestCount + worstCount

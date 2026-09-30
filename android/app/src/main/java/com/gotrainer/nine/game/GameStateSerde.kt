@@ -19,7 +19,7 @@ object GameStateSerde {
                 s.reviewIdx ?: -1, b(s.undoUsed), s.difficulty.id,
                 s.targetWinrate, b(s.pendingFreePly),
                 s.finalScoreLead?.toString() ?: "null", b(s.graphOpen),
-                s.playerRating, s.playerRankText,
+                s.playerRating, s.playerRankText, b(s.ranked),
             ).joinToString(","),
         )
         appendLine(s.history.joinToString(";") { encodeMove(it) })
@@ -36,7 +36,8 @@ object GameStateSerde {
             val lines = blob.lines()
             if (lines.size < 8 || lines[0] != VERSION) return null
             val f = lines[1].split(",")
-            if (f.size != 20) return null
+            // 20-field blobs predate the ranked toggle; they default to ranked.
+            if (f.size != 20 && f.size != 21) return null
             return GameState(
                 toMove = f[0].toIntOrNull() ?: return null,
                 playerColor = f[1].toIntOrNull() ?: return null,
@@ -58,6 +59,7 @@ object GameStateSerde {
                 graphOpen = f[17] == "1",
                 playerRating = f[18].toDoubleOrNull() ?: return null,
                 playerRankText = f[19],
+                ranked = f.getOrNull(20)?.let { it == "1" } ?: true,
                 history = if (lines[2].isEmpty()) emptyList() else lines[2].split(";").map { decodeMove(it) ?: return null },
                 candidates = lines[3].takeIf { it != "NULL" }?.split(";")?.map { decodeCand(it) ?: return null },
                 evaluations = lines[4].takeIf { it != "NULL" }?.split(";")?.map { decodeEval(it) ?: return null },

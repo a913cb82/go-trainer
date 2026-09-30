@@ -109,7 +109,7 @@ class GameScreenshots {
     fun s02_setup() {
         snap("02_setup") {
             Surface {
-                NewGameScreen(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onBack = {}, onStart = {})
+                NewGameScreen(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, draftRanked = false, onDraftRanked = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onBack = {}, onStart = {})
             }
         }
     }
@@ -229,6 +229,7 @@ class GameScreenshots {
                     draftWorst = 3, onDraftWorst = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
                     draftFeedback = true, onDraftFeedback = {},
+                    draftRanked = true, onDraftRanked = {},
                     draftDifficulty = Difficulty.AUTOMATCH, onDraftDifficulty = {},
                     draftTargetWinrate = 50, onDraftTargetWinrate = {},
                     onBack = {}, onStart = {},
@@ -366,6 +367,7 @@ class GameScreenshotsDark {
                     draftWorst = 3, onDraftWorst = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
                     draftFeedback = false, onDraftFeedback = {},
+                    draftRanked = false, onDraftRanked = {},
                     draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {},
                     draftTargetWinrate = 50, onDraftTargetWinrate = {},
                     onBack = {}, onStart = {},
