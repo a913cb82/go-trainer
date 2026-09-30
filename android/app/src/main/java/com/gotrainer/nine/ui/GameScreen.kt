@@ -195,19 +195,23 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     } else {
         if (s.choiceCount == 0) null else s.candidates
     }
-    // Capture pop: a 200 ms visual overlay keyed on the play's fx payload.
-    // Game state moves on instantly (bot replies, undo, review all cut it by
-    // replacing/clearing fx); this clock draws pixels and nothing else.
-    val fx = if (reviewing) null else s.captureFx
+    // Stone animation: 150 ms settle on every placement, plus a 150 ms
+    // shrink when the play captured (one 300 ms clock, same as demo
+    // e_shrink; plain placements match f_place). Game state moves on
+    // instantly (bot replies, undo, review all cut it by replacing/clearing
+    // fx); this clock draws pixels and nothing else.
+    val place = if (reviewing) null else s.placeFx
+    val caps = if (reviewing) null else s.captureFx
+    val animTotalMs = if (caps != null) PLACE_MS + SHRINK_MS else PLACE_MS
     var fxVisible by remember { mutableStateOf(false) }
     val fxProgress = remember { Animatable(1f) }
-    LaunchedEffect(fx) {
-        if (fx == null) {
+    LaunchedEffect(place?.seq) {
+        if (place == null) {
             fxVisible = false
         } else {
             fxVisible = true
             fxProgress.snapTo(0f)
-            fxProgress.animateTo(1f, animationSpec = tween(200, easing = LinearEasing))
+            fxProgress.animateTo(1f, animationSpec = tween(animTotalMs, easing = LinearEasing))
             fxVisible = false
         }
     }
@@ -314,8 +318,10 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 feedbackMove = feedbackMove,
                 onVertexClick = actions.onBoardTap,
                 modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
-                popStones = if (fxVisible) fx?.stones ?: emptyList() else emptyList(),
-                popProgress = fxProgress.value,
+                popStones = if (fxVisible) caps?.stones ?: emptyList() else emptyList(),
+                placeFx = if (fxVisible) place else null,
+                animProgress = fxProgress.value,
+                animTotalMs = animTotalMs,
             )
 
             // Feedback scope — only while playing with feedback to scope.

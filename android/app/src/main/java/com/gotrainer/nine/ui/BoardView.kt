@@ -17,9 +17,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.CapturedStone
+import com.gotrainer.nine.game.PlaceFx
 import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GapStyle
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 private val WOOD = Color(0xFFE8C07A)
@@ -33,6 +33,28 @@ internal fun tagStyle(tag: String): GapStyle = when (tag) {
     else -> GapStyle("#b7791f", "#fff6b0")
 }
 
+/** Place phase (settle) and shrink phase (captures) lengths, ms. */
+internal const val PLACE_MS = 150
+internal const val SHRINK_MS = 150
+
+/** One settle frame: oversize scale, height above the point, ring opacity. */
+internal data class PlaceFrame(val scale: Float, val dyCells: Float, val ringAlpha: Float)
+
+/**
+ * Settle motion: arrives 1.33x and 0.462 cell high, ease-out to rest; the
+ * last-move ring fades in over the last third. Matches demo f_place.
+ */
+internal fun placeFrame(k: Float): PlaceFrame {
+    val e = 1f - (1f - k) * (1f - k) * (1f - k)
+    return PlaceFrame(1.33f - 0.33f * e, -0.462f * (1f - e), ((k - 0.65f) / 0.35f).coerceIn(0f, 1f))
+}
+
+/** Capture shrink: smoothstep 1 to 0 at full opacity. Matches demo e_shrink. */
+internal fun shrinkScale(k: Float): Float {
+    val s = k * k * (3 - 2 * k)
+    return (1f - s).coerceIn(0f, 1f)
+}
+
 /** Pure Canvas 9x9 board: grid, hoshi, stones, candidates, feedback. Wood board in both themes. */
 @Composable
 fun BoardView(
@@ -43,10 +65,14 @@ fun BoardView(
     feedbackMove: Pair<Int, Int>?,
     onVertexClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
-    /** Captured stones mid-pop (empty points now); purely visual overlay. */
+    /** Captured stones mid-shrink (empty points now); purely visual overlay. */
     popStones: List<CapturedStone> = emptyList(),
-    /** 0 = swell start, 1 = gone; driven by the parent's 200 ms clock. */
-    popProgress: Float = 1f,
+    /** Stone currently settling (already on the logical board); drawn on top. */
+    placeFx: PlaceFx? = null,
+    /** 0 = arrival, 1 = rest; driven by the parent's 150/300 ms clock. */
+    animProgress: Float = 1f,
+    /** 150 (place only) or 300 (place then shrink); picks the phase split. */
+    animTotalMs: Int = PLACE_MS,
 ) {
     Canvas(
         modifier = modifier
@@ -93,9 +119,9 @@ fun BoardView(
             }
         }
         // stones with shadow
-        fun stoneAt(x: Int, y: Int, v: Int, scale: Float = 1f, alpha: Float = 1f) {
+        fun stoneAt(x: Int, y: Int, v: Int, scale: Float = 1f, alpha: Float = 1f, dyCells: Float = 0f) {
             if (scale <= 0f || alpha <= 0f) return
-            val c = Offset(cx(x), cy(y))
+            val c = Offset(cx(x), cy(y) + dyCells * cell)
             drawCircle(Color.Black.copy(alpha = 0.25f * alpha), radius = cell * 0.46f * scale, center = Offset(c.x + 2f, c.y + 3f))
             if (v == 1) {
                 drawCircle(Color(0xFF111111).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c)
@@ -105,25 +131,32 @@ fun BoardView(
                 drawCircle(Color(0xFF8A7040).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c, style = Stroke(width = 2f))
             }
         }
+        // Stone animation: the logical board already moved on — this draws
+        // nothing but pixels. The settling stone skips the static pass and
+        // draws on top of its neighbours; captured stones (gone logically)
+        // sit full-size through the place phase, then shrink away unfaded.
+        val placing = placeFx != null && animProgress < 1f
+        val elapsed = animProgress.coerceIn(0f, 1f) * animTotalMs
         for (y in 0 until 9) for (x in 0 until 9) {
             val v = boardSignMap[y][x]
             if (v == 0) continue
+            if (placing && x == placeFx!!.x && y == placeFx.y) continue
             stoneAt(x, y, v)
         }
-        // capture pop overlay: synchronized swell (first 30%, ease-out) then
-        // ease-out collapse into a fade (~200 ms total, same curve as the demo).
-        // The logical board already moved on — this draws nothing but pixels.
-        if (popStones.isNotEmpty() && popProgress < 1f) {
-            val u = popProgress.coerceIn(0f, 1f)
-            val (scale, alpha) = if (u < 0.3f) {
-                val k = u / 0.3f
-                (1f + 0.15f * (1f - (1f - k) * (1f - k) * (1f - k))) to 1f
-            } else {
-                val k = (u - 0.3f) / 0.7f
-                val e = 1f - (1f - k) * (1f - k) * (1f - k)
-                max(1.15f * (1f - e), 0f) to (1f - k * k)
+        if (placing) {
+            val fr = placeFrame((elapsed / PLACE_MS).coerceIn(0f, 1f))
+            stoneAt(placeFx!!.x, placeFx.y, placeFx.color, scale = fr.scale, dyCells = fr.dyCells)
+            if (fr.ringAlpha > 0f) {
+                drawCircle(
+                    (if (placeFx.color == 1) Color.White else Color.Black).copy(alpha = fr.ringAlpha),
+                    radius = cell * 0.2f, center = Offset(cx(placeFx.x), cy(placeFx.y)),
+                    style = Stroke(width = 4f),
+                )
             }
-            for (st in popStones) stoneAt(st.x, st.y, st.color, scale, alpha)
+        }
+        if (popStones.isNotEmpty() && animProgress < 1f) {
+            val sc = shrinkScale(((elapsed - PLACE_MS) / SHRINK_MS).coerceIn(0f, 1f))
+            if (sc > 0f) for (st in popStones) stoneAt(st.x, st.y, st.color, scale = sc)
         }
         // last-move ring — skipped ONLY when a feedback halo is actually drawn at
         // that point (the halo is what would collide). In free-choice review the
@@ -134,7 +167,10 @@ fun BoardView(
             evaluations?.any { it.x == feedbackMove.first && it.y == feedbackMove.second } == true
         if (lastMove != null) {
             val (lx, ly) = lastMove
-            if (boardSignMap[ly][lx] != 0 && !(feedbackHasHalo && lx == feedbackMove!!.first && ly == feedbackMove.second)) {
+            // The settling stone carries its own fading ring; the static one
+            // returns when the clock finishes.
+            val ringCovered = placing && lx == placeFx!!.x && ly == placeFx.y
+            if (!ringCovered && boardSignMap[ly][lx] != 0 && !(feedbackHasHalo && lx == feedbackMove!!.first && ly == feedbackMove.second)) {
                 val v = boardSignMap[ly][lx]
                 drawCircle(
                     if (v == 1) Color.White else Color.Black,

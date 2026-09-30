@@ -261,7 +261,8 @@ class GameScreenshots {
 
     @Test
     fun s15_pop() {
-        // Capture pop frozen mid-collapse: Black just took two White stones.
+        // Capture beat frozen mid-shrink (elapsed 225/300 ms): Black's stone
+        // has landed with its ring, two White stones half-diminished.
         snap("15_pop") {
             Surface {
                 com.gotrainer.nine.ui.BoardView(
@@ -278,7 +279,32 @@ class GameScreenshots {
                         com.gotrainer.nine.game.CapturedStone(4, 3, -1),
                         com.gotrainer.nine.game.CapturedStone(4, 4, -1),
                     ),
-                    popProgress = 0.55f,
+                    placeFx = com.gotrainer.nine.game.PlaceFx(4, 5, 1, 7),
+                    animProgress = 0.75f,
+                    animTotalMs = 300,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun s16_place() {
+        // Settle frozen mid-drop (elapsed 45/150 ms): the stone hangs big
+        // and high over its neighbours, ring not yet in.
+        snap("16_place") {
+            Surface {
+                com.gotrainer.nine.ui.BoardView(
+                    boardSignMap = boardWith(
+                        Triple(3, 5, 1), Triple(5, 5, 1), Triple(4, 5, 1),
+                    ),
+                    candidates = null,
+                    evaluations = null,
+                    lastMove = 4 to 5,
+                    feedbackMove = null,
+                    onVertexClick = { _, _ -> },
+                    placeFx = com.gotrainer.nine.game.PlaceFx(4, 5, 1, 3),
+                    animProgress = 0.3f,
+                    animTotalMs = 150,
                 )
             }
         }

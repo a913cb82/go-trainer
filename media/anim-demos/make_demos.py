@@ -5,13 +5,17 @@ from PIL import Image, ImageDraw
 import math
 
 N = 9
-SIZE = 480
-PAD = 40
+# Phone-faithful geometry: BoardView uses pad = w*0.08, cell = (w-2*pad)/8
+# on a ~1000px full-bleed board, so render at 960 and copy its constants.
+SIZE = 960
+PAD = SIZE * 0.08
 CELL = (SIZE - 2 * PAD) / (N - 1)
 WOOD = (232, 192, 122)
 GRID = (62, 43, 21)
-BLACK, BLACK_HI = (17, 17, 17), (58, 58, 58)
-WHITE, WHITE_RIM = (253, 248, 236), (138, 112, 64)
+BLACK, BLACK_HI = (0x11, 0x11, 0x11), (0x3A, 0x3A, 0x3A)
+WHITE, WHITE_RIM = (0xFD, 0xF8, 0xEC), (0x8A, 0x70, 0x40)
+COORD = (0x5A, 0x3E, 0x1A)
+LETTERS = "ABCDEFGHJKLMNOPQRST"
 
 W = [(4, 3), (5, 3), (4, 4)]  # captured
 B = [(3, 3), (6, 3), (4, 2), (5, 2), (3, 4), (5, 4), (3, 5), (5, 5)]
@@ -20,6 +24,16 @@ STARS = [(2, 2), (6, 2), (2, 6), (6, 6), (4, 4)]
 
 def pt(x, y):
     return PAD + x * CELL, PAD + y * CELL
+
+def coord_font():
+    try:
+        from PIL import ImageFont
+        return ImageFont.load_default(size=round(CELL * 0.32))
+    except Exception:
+        from PIL import ImageFont
+        return ImageFont.load_default()
+
+FONT = coord_font()
 
 def base():
     img = Image.new("RGB", (SIZE, SIZE), WOOD)
@@ -30,24 +44,31 @@ def base():
         d.line([c, PAD, c, SIZE - PAD], fill=GRID, width=2)
     for s in STARS:
         x, y = pt(*s)
-        d.ellipse([x - 4, y - 4, x + 4, y + 4], fill=GRID)
+        r = CELL * 0.11
+        d.ellipse([x - r, y - r, x + r, y + r], fill=GRID)
+    for i in range(N):
+        c = PAD + i * CELL
+        d.text((c, PAD - CELL * 0.30), LETTERS[i], font=FONT, fill=COORD, anchor="mm")
+        d.text((PAD - CELL * 0.48, c), str(9 - i), font=FONT, fill=COORD, anchor="mm")
     return img, d
 
 def stone(d, x, y, color, scale=1.0, alpha=255, dx=0.0, dy=0.0):
+    # Mirrors BoardView.stoneAt: shadow (black @0.25, offset +2/+3px),
+    # body r=cell*0.44, black highlight #3A3A3A r=cell*0.13 at
+    # (-0.12,-0.12)*cell, white rim #8A7040 width 2.
     cx, cy = pt(x, y)
     cx += dx * CELL
     cy += dy * CELL
     r = CELL * 0.44 * scale
     if r <= 0.5 or alpha <= 4:
         return
-    # shadow
-    sh = int(70 * (alpha / 255))
-    d.ellipse([cx - r + 2, cy - r + 3, cx + r + 2, cy + r + 3], fill=(0, 0, 0, 0) if False else None, outline=None)
     # PIL has no per-shape alpha on RGB; fake fade by blending toward wood
-    def blend(c):
-        t = alpha / 255
+    def blend(c, a=alpha):
+        t = a / 255
         return tuple(int(WOOD[i] + (c[i] - WOOD[i]) * t) for i in range(3))
-    d.ellipse([cx - r + 2, cy - r + 3, cx + r + 2, cy + r + 3], fill=blend((90, 70, 40)))
+    sr = CELL * 0.46 * scale
+    d.ellipse([cx - sr + 2, cy - sr + 3, cx + sr + 2, cy + sr + 3],
+              fill=blend((0, 0, 0), alpha * 0.25))
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=blend(color))
     if color == BLACK:
         hr = r * 0.3
@@ -55,13 +76,25 @@ def stone(d, x, y, color, scale=1.0, alpha=255, dx=0.0, dy=0.0):
     else:
         d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=blend(WHITE_RIM), width=2)
 
+def marker(d, x, y, color, alpha=255):
+    # Mirrors BoardView's last-move ring: white on black stones, black on
+    # white, r=cell*0.2, width 4. Fade-in blends the ring toward the stone
+    # body color (PIL has no per-shape alpha on RGB).
+    if alpha <= 4:
+        return
+    cx, cy = pt(x, y)
+    r = CELL * 0.2
+    ring = (255, 255, 255) if color == BLACK else (0, 0, 0)
+    t = alpha / 255
+    col = tuple(int(color[i] + (ring[i] - color[i]) * t) for i in range(3))
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=col, width=4)
+
 def static_board():
     img, d = base()
     for x, y in B:
         stone(d, x, y, BLACK)
     stone(d, *LAST, BLACK)
-    lx, ly = pt(*LAST)
-    d.ellipse([lx - CELL * 0.53, ly - CELL * 0.53, lx + CELL * 0.53, ly + CELL * 0.53], outline=(200, 60, 40), width=5)
+    marker(d, *LAST, BLACK)
     return img
 
 def ease_out(t):
@@ -101,8 +134,7 @@ def draw_static(d):
     for bx, by in B:
         stone(d, bx, by, BLACK)
     stone(d, *LAST, BLACK)
-    lx, ly = pt(*LAST)
-    d.ellipse([lx - CELL * 0.53, ly - CELL * 0.53, lx + CELL * 0.53, ly + CELL * 0.53], outline=(200, 60, 40), width=5)
+    marker(d, *LAST, BLACK)
 
 def new_frame():
     img, d = base()
@@ -198,6 +230,75 @@ def anim_fizz():
         out.append(img)
     return out
 
+# E: SHRINK + PLACE (the full capture beat), ~530ms on one clock. The
+# capturing stone settles first (same motion as F); halfway through its
+# landing the captured stones begin their shrink-only dissolve in place —
+# smoothstep scale plus a slightly quicker fade so nothing lingers.
+# Synchronized across the captured group; the last-move ring rides the
+# placed stone from frame 0, exactly as BoardView draws it.
+def anim_shrink():
+    out = []
+    total = 9
+    for f in range(total):
+        img, d = base()
+        for bx, by in B:
+            stone(d, bx, by, BLACK)
+        sk = min(max((f - 4) / 4.0, 0.0), 1.0)
+        if sk > 0:
+            # Shrink only — no fade; the stones simply diminish to nothing.
+            smooth = sk * sk * (3 - 2 * sk)
+            s = max(0.0, 1 - smooth)
+            for x, y in W:
+                stone(d, x, y, WHITE, scale=s)
+        else:
+            for x, y in W:
+                stone(d, x, y, WHITE)
+        # Placing stone always on top: its oversized arrival overlaps
+        # neighbours, so it draws last, with its ring fading in over the
+        # last third of the settle.
+        pk = min(f / 4.0, 1.0)
+        pe = ease_out(pk)
+        stone(d, *LAST, BLACK, scale=1.33 - 0.33 * pe, dy=-0.462 * (1 - pe))
+        marker(d, *LAST, BLACK, alpha=int(255 * min(max((pk - 0.65) / 0.35, 0.0), 1.0)))
+        out.append(img)
+    return out
+
+# F: PLACE (a stone being set down), ~300ms. The stone arrives slightly
+# oversized and a touch high, then shrinks into full size while dropping
+# onto the point — ease-out, so it lands fast and settles gently.
+PLACE_PT = (4, 5)
+
+def frames_place(anim_frames, pre=8, post=8):
+    pres = []
+    for _ in range(pre):
+        img, d = base()
+        for bx, by in B:
+            stone(d, bx, by, BLACK)
+        pres.append(img)
+    posts = []
+    for _ in range(post):
+        img, d = base()
+        for bx, by in B:
+            stone(d, bx, by, BLACK)
+        stone(d, *PLACE_PT, BLACK)
+        marker(d, *PLACE_PT, BLACK)
+        posts.append(img)
+    return pres + anim_frames + posts
+
+def anim_place():
+    out = []
+    total = 5
+    for f in range(total):
+        img, d = base()
+        for bx, by in B:
+            stone(d, bx, by, BLACK)
+        k = f / (total - 1)
+        e = ease_out(k)
+        stone(d, *PLACE_PT, BLACK, scale=1.33 - 0.33 * e, dy=-0.462 * (1 - e))
+        marker(d, *PLACE_PT, BLACK, alpha=int(255 * min(max((k - 0.65) / 0.35, 0.0), 1.0)))
+        out.append(img)
+    return out
+
 def save_gif(path, frames, n_pre, n_anim):
     # Holds read as pauses only if every frame is byte-distinct (PIL merges
     # identical frames); one invisible corner-pixel jitter defeats the merge.
@@ -213,10 +314,16 @@ if __name__ == "__main__":
     import os
     os.makedirs("/home/acbraith/projects/go-trainer/media/anim-demos", exist_ok=True)
     from PIL import Image as _Img
-    for name, fn in [("a_pop", anim_pop), ("b_float", anim_float), ("c_poof", anim_poof), ("d_fizz", anim_fizz)]:
+    for name, fn in [("e_shrink", anim_shrink)]:
         anim = fn()
         frames = frames_with_hold(anim)
         n_pre = (len(frames) - len(anim)) // 2
         path = f"/home/acbraith/projects/go-trainer/media/anim-demos/{name}.gif"
         save_gif(path, frames, n_pre, len(anim))
         print(name, len(frames), "frames ->", path, "(file:", _Img.open(path).n_frames, ")")
+    anim = anim_place()
+    frames = frames_place(anim)
+    n_pre = (len(frames) - len(anim)) // 2
+    path = "/home/acbraith/projects/go-trainer/media/anim-demos/f_place.gif"
+    save_gif(path, frames, n_pre, len(anim))
+    print("f_place", len(frames), "frames ->", path, "(file:", _Img.open(path).n_frames, ")")

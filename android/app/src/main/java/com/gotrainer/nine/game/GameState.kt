@@ -43,6 +43,14 @@ data class CapturedStone(val x: Int, val y: Int, val color: Int)
  */
 data class CaptureFx(val stones: List<CapturedStone>, val seq: Int)
 
+/**
+ * TRANSIENT place-animation payload: the stone the last real play put
+ * down. Never persisted; cleared with the capture payload. The logical
+ * board already holds the stone — BoardView skips it statically and draws
+ * the settle on top instead.
+ */
+data class PlaceFx(val x: Int, val y: Int, val color: Int, val seq: Int)
+
 data class GameState(
     val boardSignMap: List<List<Int>> = List(9) { List(9) { 0 } },
     val history: List<MoveRec> = emptyList(),
@@ -98,6 +106,8 @@ data class GameState(
     val playerRating: Double = BotRatings.START_RATING,
     /** Pop overlay for the last play's captures; transient, never persisted. */
     val captureFx: CaptureFx? = null,
+    /** Settle overlay for the last play's stone; transient, never persisted. */
+    val placeFx: PlaceFx? = null,
     /**
      * The player opted into rating. Effective only when the game is actually
      * free play ([choiceCount] == 0); suggestions games are always unrated.
