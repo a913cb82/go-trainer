@@ -455,11 +455,6 @@ internal fun OpponentSheetContent(
                 valueRange = 10f..90f,
                 steps = 7,
             )
-            Text(
-                "Picks the rung nearest your target when you press Start.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         // Suggestions games never rate (free-choice only); say so plainly.
         val ratedGame = !draftMultipleChoice || draftBest + draftWorst == 0
