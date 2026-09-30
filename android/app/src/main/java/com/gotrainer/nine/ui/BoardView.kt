@@ -34,7 +34,7 @@ internal fun tagStyle(tag: String): GapStyle = when (tag) {
 }
 
 /** Place phase (settle) and shrink phase (captures) lengths, ms. */
-internal const val PLACE_MS = 120
+internal const val PLACE_MS = 90
 internal const val SHRINK_MS = 150
 
 /** One settle frame: oversize scale, height above the point, ring opacity. */
@@ -69,7 +69,7 @@ fun BoardView(
     popStones: List<CapturedStone> = emptyList(),
     /** Stone currently settling (already on the logical board); drawn on top. */
     placeFx: PlaceFx? = null,
-    /** 0 = arrival, 1 = rest; driven by the parent's 120/270 ms clock. */
+    /** 0 = arrival, 1 = rest; driven by the parent's 90/240 ms clock. */
     animProgress: Float = 1f,
     /** 150 (place only) or 300 (place then shrink); picks the phase split. */
     animTotalMs: Int = PLACE_MS,

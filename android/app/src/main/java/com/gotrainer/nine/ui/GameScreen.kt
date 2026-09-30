@@ -195,8 +195,8 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     } else {
         if (s.choiceCount == 0) null else s.candidates
     }
-    // Stone animation: 120 ms settle on every placement, plus a 150 ms
-    // shrink when the play captured (one 270 ms clock, same as demo
+    // Stone animation: 90 ms settle on every placement, plus a 150 ms
+    // shrink when the play captured (one 240 ms clock, same as demo
     // e_shrink; plain placements match f_place). Game state moves on
     // instantly (bot replies, undo, review all cut it by replacing/clearing
     // fx); this clock draws pixels and nothing else.
