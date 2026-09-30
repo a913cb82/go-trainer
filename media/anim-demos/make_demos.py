@@ -238,12 +238,12 @@ def anim_fizz():
 # placed stone from frame 0, exactly as BoardView draws it.
 def anim_shrink():
     out = []
-    total = 9
+    total = 8
     for f in range(total):
         img, d = base()
         for bx, by in B:
             stone(d, bx, by, BLACK)
-        sk = min(max((f - 4) / 4.0, 0.0), 1.0)
+        sk = min(max((f - 3) / 4.0, 0.0), 1.0)
         if sk > 0:
             # Shrink only — no fade; the stones simply diminish to nothing.
             smooth = sk * sk * (3 - 2 * sk)
@@ -256,7 +256,7 @@ def anim_shrink():
         # Placing stone always on top: its oversized arrival overlaps
         # neighbours, so it draws last, with its ring fading in over the
         # last third of the settle.
-        pk = min(f / 4.0, 1.0)
+        pk = min(f / 3.0, 1.0)
         pe = ease_out(pk)
         stone(d, *LAST, BLACK, scale=1.33 - 0.33 * pe, dy=-0.462 * (1 - pe))
         marker(d, *LAST, BLACK, alpha=int(255 * min(max((pk - 0.65) / 0.35, 0.0), 1.0)))
@@ -287,7 +287,7 @@ def frames_place(anim_frames, pre=8, post=8):
 
 def anim_place():
     out = []
-    total = 5
+    total = 4
     for f in range(total):
         img, d = base()
         for bx, by in B:
