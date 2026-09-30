@@ -155,29 +155,15 @@ fun NewGameScreen(
             // games are always unrated, so the toggle locks to Unranked there.
             // The opt-in survives: flip back to free play and Ranked returns.
             val canRank = !draftMultipleChoice || draftBest + draftWorst == 0
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Ranked game", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (canRank) "Counts toward your rank" else "Needs free choice — no candidate moves",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SingleChoiceSegmentedButtonRow {
+                listOf(true to "Ranked", false to "Unranked").forEachIndexed { i, (v, label) ->
+                    SegmentedButton(
+                        selected = (if (canRank) draftRanked else false) == v,
+                        onClick = { onDraftRanked(v) },
+                        enabled = canRank,
+                        shape = SegmentedButtonDefaults.itemShape(i, 2),
+                        label = { Text(label) },
                     )
-                }
-                SingleChoiceSegmentedButtonRow {
-                    listOf(true to "Ranked", false to "Unranked").forEachIndexed { i, (v, label) ->
-                        SegmentedButton(
-                            selected = (if (canRank) draftRanked else false) == v,
-                            onClick = { onDraftRanked(v) },
-                            enabled = canRank,
-                            shape = SegmentedButtonDefaults.itemShape(i, 2),
-                            label = { Text(label) },
-                        )
-                    }
                 }
             }
 
