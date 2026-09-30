@@ -25,19 +25,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,15 +46,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
 import com.gotrainer.nine.game.Difficulty
-import com.gotrainer.nine.game.GameFlow
 import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GameState
-import com.gotrainer.nine.game.label
 import com.gotrainer.nine.game.GameViewModel
 import com.gotrainer.nine.game.GoBoard
 import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.game.Scoring
-import kotlin.math.roundToInt
 
 /** Header subtitle: rank alone in free play, rank + total choices otherwise. */
 internal fun headerSubtitle(s: GameState): String {
@@ -84,6 +74,7 @@ data class GameActions(
     val onApplySetup: (Rank, Boolean, Int, Int, ColorChoice, Boolean, Difficulty, Int) -> Unit =
         { _, _, _, _, _, _, _, _ -> },
     val onShowStats: () -> Unit = {},
+    val onOpenSetup: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,46 +83,9 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val snack = remember { SnackbarHostState() }
     var showStats by remember { mutableStateOf(false) }
+    var showSetup by remember { mutableStateOf(false) }
     val history by vm.ratedHistoryFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-
-    s.error?.let { err ->
-        LaunchedEffect(err) {
-            snack.showSnackbar(err)
-            vm.clearError()
-        }
-    }
-
-    if (showStats) {
-        StatsScreen(
-            history = history, playerRankText = s.playerRankText,
-            onBack = { showStats = false }, onReset = vm::resetHistory,
-        )
-        return
-    }
-    GameScreenContent(
-        s = s,
-        actions = GameActions(
-            onBoardTap = vm::onBoardTap,
-            onNewGame = vm::newGame,
-            onUndo = vm::undo,
-            onPass = vm::pass,
-            onShowFeedback = vm::setShowFeedback,
-            onScopeAll = vm::setFeedbackScopeAll,
-            onGraphOpen = vm::setGraphOpen,
-            onReview = vm::setReviewIdx,
-            onApplySetup = vm::applySetup,
-            onShowStats = { showStats = true },
-        ),
-        snack = snack,
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostState = remember { SnackbarHostState() }) {
-    var sheetOpen by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // Staged setup: the sheet edits drafts; nothing applies until Start game.
+    // Staged setup: the page edits drafts; nothing applies until Start game.
     var draftRank by remember { mutableStateOf(s.rank) }
     var draftMultipleChoice by remember { mutableStateOf(s.multipleChoice) }
     var draftBest by remember { mutableStateOf(s.bestCount) }
@@ -149,8 +103,75 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
         draftFeedback = s.showFeedback
         draftDifficulty = s.difficulty
         draftTargetWinrate = s.targetWinrate
-        sheetOpen = true
+        showSetup = true
     }
+
+    s.error?.let { err ->
+        LaunchedEffect(err) {
+            snack.showSnackbar(err)
+            vm.clearError()
+        }
+    }
+
+    if (showStats) {
+        StatsScreen(
+            history = history, playerRankText = s.playerRankText,
+            onBack = { showStats = false }, onReset = vm::resetHistory,
+        )
+        return
+    }
+    if (showSetup) {
+        NewGameScreen(
+            s = s,
+            draftRank = draftRank,
+            onDraftRank = { draftRank = it },
+            draftMultipleChoice = draftMultipleChoice,
+            onDraftMultipleChoice = { draftMultipleChoice = it },
+            draftBest = draftBest,
+            onDraftBest = { draftBest = it },
+            draftWorst = draftWorst,
+            onDraftWorst = { draftWorst = it },
+            draftColor = draftColor,
+            onDraftColor = { draftColor = it },
+            draftFeedback = draftFeedback,
+            onDraftFeedback = { draftFeedback = it },
+            draftDifficulty = draftDifficulty,
+            onDraftDifficulty = { draftDifficulty = it },
+            draftTargetWinrate = draftTargetWinrate,
+            onDraftTargetWinrate = { draftTargetWinrate = it },
+            onBack = { showSetup = false },
+            onStart = {
+                vm.applySetup(
+                    draftRank, draftMultipleChoice, draftBest, draftWorst,
+                    draftColor, draftFeedback, draftDifficulty, draftTargetWinrate,
+                )
+                showSetup = false
+            },
+        )
+        return
+    }
+    GameScreenContent(
+        s = s,
+        actions = GameActions(
+            onBoardTap = vm::onBoardTap,
+            onNewGame = vm::newGame,
+            onUndo = vm::undo,
+            onPass = vm::pass,
+            onShowFeedback = vm::setShowFeedback,
+            onScopeAll = vm::setFeedbackScopeAll,
+            onGraphOpen = vm::setGraphOpen,
+            onReview = vm::setReviewIdx,
+            onApplySetup = vm::applySetup,
+            onShowStats = { showStats = true },
+            onOpenSetup = { openSetup() },
+        ),
+        snack = snack,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostState = remember { SnackbarHostState() }) {
 
     val rIdx = s.reviewIdx
     val reviewing = rIdx != null
@@ -237,7 +258,7 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                         TextButton(onClick = actions.onPass, enabled = s.status == "playing" && !reviewing) {
                             Text("Pass")
                         }
-                        IconButton(onClick = { openSetup() }) {
+                        IconButton(onClick = actions.onOpenSetup) {
                             Icon(Icons.Filled.Refresh, contentDescription = "New game")
                         }
                     },
@@ -323,210 +344,5 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
         }
     }
 
-    if (sheetOpen) {
-        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, sheetState = sheetState) {
-            OpponentSheetContent(
-                s = s,
-                draftRank = draftRank,
-                onDraftRank = { draftRank = it },
-                draftMultipleChoice = draftMultipleChoice,
-                onDraftMultipleChoice = { draftMultipleChoice = it },
-                draftBest = draftBest,
-                onDraftBest = { draftBest = it },
-                draftWorst = draftWorst,
-                onDraftWorst = { draftWorst = it },
-                draftColor = draftColor,
-                onDraftColor = { draftColor = it },
-                draftFeedback = draftFeedback,
-                onDraftFeedback = { draftFeedback = it },
-                draftDifficulty = draftDifficulty,
-                onDraftDifficulty = { draftDifficulty = it },
-                draftTargetWinrate = draftTargetWinrate,
-                onDraftTargetWinrate = { draftTargetWinrate = it },
-                onStart = {
-                    actions.onApplySetup(
-                        draftRank, draftMultipleChoice, draftBest, draftWorst,
-                        draftColor, draftFeedback, draftDifficulty, draftTargetWinrate,
-                    )
-                    sheetOpen = false
-                },
-            )
-        }
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun OpponentSheetContent(
-    s: GameState,
-    draftRank: Rank,
-    onDraftRank: (Rank) -> Unit,
-    draftMultipleChoice: Boolean,
-    onDraftMultipleChoice: (Boolean) -> Unit,
-    draftBest: Int,
-    onDraftBest: (Int) -> Unit,
-    draftWorst: Int,
-    onDraftWorst: (Int) -> Unit,
-    draftColor: ColorChoice,
-    onDraftColor: (ColorChoice) -> Unit,
-    draftFeedback: Boolean,
-    onDraftFeedback: (Boolean) -> Unit,
-    draftDifficulty: Difficulty,
-    onDraftDifficulty: (Difficulty) -> Unit,
-    draftTargetWinrate: Int,
-    onDraftTargetWinrate: (Int) -> Unit,
-    onStart: () -> Unit,
-) {
-    val showChoiceOptions = draftMultipleChoice && (draftBest + draftWorst) > 0
-
-    Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp).padding(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text("New game", style = MaterialTheme.typography.titleLarge)
-
-        Text("You play as", style = MaterialTheme.typography.labelLarge)
-        SingleChoiceSegmentedButtonRow {
-            ColorChoice.ALL.forEachIndexed { i, c ->
-                SegmentedButton(
-                    selected = draftColor == c,
-                    onClick = { onDraftColor(c) },
-                    shape = SegmentedButtonDefaults.itemShape(i, ColorChoice.ALL.size),
-                    label = { Text(c.label()) },
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Your rank", style = MaterialTheme.typography.bodyMedium)
-            Text(s.playerRankText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        }
-
-        Text("Difficulty", style = MaterialTheme.typography.labelLarge)
-        SingleChoiceSegmentedButtonRow {
-            Difficulty.entries.forEachIndexed { i, d ->
-                SegmentedButton(
-                    selected = draftDifficulty == d,
-                    onClick = { onDraftDifficulty(d) },
-                    shape = SegmentedButtonDefaults.itemShape(i, Difficulty.entries.size),
-                    label = { Text(d.label()) },
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Automatch previews the rung Start would pick, live as the slider moves.
-            val autoRank = Rank.ALL[GameFlow.automatchRung(s.playerRating, draftTargetWinrate)]
-            Text("Opponent plays as", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                (if (draftDifficulty == Difficulty.AUTOMATCH) autoRank else draftRank).id,
-                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (draftDifficulty == Difficulty.FIXED) {
-            val rankIdx = Rank.ALL.indexOf(draftRank).coerceAtLeast(0)
-            Slider(
-                value = rankIdx.toFloat(),
-                onValueChange = { onDraftRank(Rank.ALL[it.roundToInt().coerceIn(0, Rank.ALL.size - 1)]) },
-                valueRange = 0f..(Rank.ALL.size - 1).toFloat(),
-                steps = (Rank.ALL.size - 2).coerceAtLeast(0),
-            )
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Target winrate", style = MaterialTheme.typography.bodyMedium)
-                Text("$draftTargetWinrate%", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            }
-            Slider(
-                value = draftTargetWinrate.toFloat(),
-                onValueChange = { onDraftTargetWinrate(it.roundToInt().coerceIn(10, 90)) },
-                valueRange = 10f..90f,
-                steps = 7,
-            )
-        }
-        // Suggestions games never rate (free-choice only); say so plainly.
-        val ratedGame = !draftMultipleChoice || draftBest + draftWorst == 0
-        Text(
-            if (ratedGame) "Rated · counts toward your rank" else "Unrated · suggestions on",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Multiple choice mode", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    if (draftMultipleChoice) "${draftBest + draftWorst} choices per move"
-                    else "Play anywhere, no candidate moves",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = draftMultipleChoice, onCheckedChange = onDraftMultipleChoice)
-        }
-
-        if (draftMultipleChoice) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Best moves to show", style = MaterialTheme.typography.bodyMedium)
-                Text("$draftBest", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            }
-            Slider(
-                value = draftBest.toFloat(),
-                onValueChange = { onDraftBest(it.roundToInt().coerceIn(0, 5)) },
-                valueRange = 0f..5f,
-                steps = 4,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Worst moves to show", style = MaterialTheme.typography.bodyMedium)
-                Text("$draftWorst", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            }
-            Slider(
-                value = draftWorst.toFloat(),
-                onValueChange = { onDraftWorst(it.roundToInt().coerceIn(0, 5)) },
-                valueRange = 0f..5f,
-                steps = 4,
-            )
-        }
-
-        // Instant feedback only exists when the game offers candidate moves.
-        if (showChoiceOptions) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Instant feedback", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Show points lost after each pick",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = draftFeedback, onCheckedChange = onDraftFeedback)
-        }
-
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
-            Text("Start game")
-        }
-    }
-}

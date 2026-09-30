@@ -17,7 +17,7 @@ import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.MoveRec
 import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.ui.GameScreenContent
-import com.gotrainer.nine.ui.OpponentSheetContent
+import com.gotrainer.nine.ui.NewGameScreen
 import com.gotrainer.nine.ui.StatsScreen
 import com.gotrainer.nine.ui.goTrainerTheme
 import kotlin.math.roundToInt
@@ -106,10 +106,10 @@ class GameScreenshots {
     }
 
     @Test
-    fun s02_opponent_sheet() {
-        snap("02_opponent_sheet") {
+    fun s02_setup() {
+        snap("02_setup") {
             Surface {
-                OpponentSheetContent(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onStart = {})
+                NewGameScreen(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onBack = {}, onStart = {})
             }
         }
     }
@@ -214,10 +214,10 @@ class GameScreenshots {
     }
 
     @Test
-    fun s13_automatch_sheet() {
-        snap("13_automatch_sheet") {
+    fun s13_automatch_setup() {
+        snap("13_automatch_setup") {
             Surface {
-                OpponentSheetContent(
+                NewGameScreen(
                     s = GameState(
                         rank = Rank.R8K, multipleChoice = false,
                         difficulty = Difficulty.AUTOMATCH, targetWinrate = 50,
@@ -231,7 +231,7 @@ class GameScreenshots {
                     draftFeedback = true, onDraftFeedback = {},
                     draftDifficulty = Difficulty.AUTOMATCH, onDraftDifficulty = {},
                     draftTargetWinrate = 50, onDraftTargetWinrate = {},
-                    onStart = {},
+                    onBack = {}, onStart = {},
                 )
             }
         }
@@ -331,10 +331,10 @@ class GameScreenshotsDark {
     }
 
     @Test
-    fun s11_dark_sheet() {
-        snap("11_dark_sheet") {
+    fun s11_dark_setup() {
+        snap("11_dark_setup") {
             Surface {
-                OpponentSheetContent(
+                NewGameScreen(
                     s = GameState(rank = Rank.R3D, multipleChoice = false, showFeedback = false),
                     draftRank = Rank.R3D, onDraftRank = {},
                     draftMultipleChoice = false, onDraftMultipleChoice = {},
@@ -344,7 +344,7 @@ class GameScreenshotsDark {
                     draftFeedback = false, onDraftFeedback = {},
                     draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {},
                     draftTargetWinrate = 50, onDraftTargetWinrate = {},
-                    onStart = {},
+                    onBack = {}, onStart = {},
                 )
             }
         }
