@@ -203,17 +203,13 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     val place = if (reviewing) null else s.placeFx
     val caps = if (reviewing) null else s.captureFx
     val animTotalMs = if (caps != null) PLACE_MS + SHRINK_MS else PLACE_MS
-    var fxVisible by remember { mutableStateOf(false) }
-    val fxProgress = remember { Animatable(1f) }
+    // The clock is born at 0 on the same composition that delivers the
+    // payload, so frame one already shows the arrival pose. (Gating the
+    // payload on a clock-started flag showed the rested board for a frame —
+    // stone present, captured gone — then jumped back to the start.)
+    val fxClock = remember(place?.seq) { Animatable(0f) }
     LaunchedEffect(place?.seq) {
-        if (place == null) {
-            fxVisible = false
-        } else {
-            fxVisible = true
-            fxProgress.snapTo(0f)
-            fxProgress.animateTo(1f, animationSpec = tween(animTotalMs, easing = LinearEasing))
-            fxVisible = false
-        }
+        if (place != null) fxClock.animateTo(1f, animationSpec = tween(animTotalMs, easing = LinearEasing))
     }
     val boardEvals: List<EvaluatedMove>? = if (rIdx != null) {
         if (!s.showFeedback) {
@@ -318,9 +314,9 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 feedbackMove = feedbackMove,
                 onVertexClick = actions.onBoardTap,
                 modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
-                popStones = if (fxVisible) caps?.stones ?: emptyList() else emptyList(),
-                placeFx = if (fxVisible) place else null,
-                animProgress = fxProgress.value,
+                popStones = caps?.stones ?: emptyList(),
+                placeFx = place,
+                animProgress = fxClock.value,
                 animTotalMs = animTotalMs,
             )
 
