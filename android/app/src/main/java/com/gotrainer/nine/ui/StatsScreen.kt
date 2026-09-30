@@ -56,8 +56,25 @@ internal fun rankAxisTicks(minRank: Double, maxRank: Double): List<Int> {
     val hi = minOf(38, (ceil(maxRank + 0.5) + 1).toInt()).let { if (it - lo < 2) lo + 2 else it }
     val span = hi - lo
     val step = max(1, (span / 3.0).roundToInt())
-    return (lo..hi step step).toList()
+    // Round the top up to the step grid: the plot maps to ticks.first/last,
+    // so a thinned-away top tick silently becomes the ceiling and flattens
+    // the climb onto the top gridline.
+    val top = lo + ceil(span.toDouble() / step).toInt() * step
+    return (lo..top step step).toList()
 }
+
+/**
+ * Games-x positions. Full history keeps true proportions (game n sits at
+ * n/size, start dot at 0); a window spreads across the plot so the newest N
+ * games use the whole width. Labels stay true game numbers either way.
+ */
+internal fun gamesXValues(gameNos: List<Int>, historySize: Int, full: Boolean): List<Float> =
+    if (full) gameNos.map { it.toFloat() / historySize }
+    else {
+        val span = (gameNos.size - 1).takeIf { it > 0 } ?: 1
+        val first = gameNos.first()
+        gameNos.map { (it - first).toFloat() / span }
+    }
 
 private enum class StatsX { GAMES, TIME }
 
@@ -207,7 +224,7 @@ private fun RatingGraph(
     }
     val xVals: List<Float> = remember(shown, xMode) {
         if (xMode == StatsX.GAMES) {
-            gameNos.map { it.toFloat() / history.size }
+            gamesXValues(gameNos, history.size, shown.third)
         } else {
             val t0 = shownHist.first().ts.toDouble()
             val span = (shownHist.last().ts - shownHist.first().ts).toDouble().takeIf { it > 0 } ?: 1.0
