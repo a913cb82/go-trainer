@@ -32,8 +32,8 @@ class SettingsRepository(private val appContext: Context) {
         private val GRAPH_OPEN = booleanPreferencesKey("graph_open")
         private val DIFFICULTY = stringPreferencesKey("difficulty")
         private val TARGET_WINRATE = intPreferencesKey("target_winrate")
-        // Rated-game history (free-choice games only); player rating is a
-        // fold over this list, never stored. See PlayerRating.
+        // Rated-game history (free-choice games only); the player rating is
+        // recomputed from this list on read, never stored. See PlayerWhr.
         private val RATED_HISTORY = stringPreferencesKey("rated_history")
         // Whole-game snapshot (GameStateSerde); restored on cold start.
         private val SAVED_GAME = stringPreferencesKey("saved_game")

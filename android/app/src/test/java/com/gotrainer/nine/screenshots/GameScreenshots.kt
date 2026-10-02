@@ -7,11 +7,11 @@ import app.cash.paparazzi.Paparazzi
 import com.android.ide.common.rendering.api.SessionParams
 import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
-import com.gotrainer.nine.game.BotRatings
 import com.gotrainer.nine.game.Difficulty
 import com.gotrainer.nine.game.EvaluatedMove
-import com.gotrainer.nine.game.PlayerRating
+import com.gotrainer.nine.game.PlayerWhr
 import com.gotrainer.nine.game.RatedGame
+import com.gotrainer.nine.game.WhrAnchors
 import com.gotrainer.nine.ui.GameActions
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.MoveRec
@@ -206,8 +206,8 @@ class GameScreenshots {
             RatedGame(base + 6 * day, "20k", true, 0.0),
             RatedGame(base + 7 * day, "24k", true, 1.0),
         )
-        val r = PlayerRating.rate(hist)
-        val label = "${BotRatings.playerLabel(r.rating, r.rd)} ±${BotRatings.rankDeviation(r.rating, r.rd).roundToInt()}"
+        val r = PlayerWhr.rate(hist)
+        val label = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±${WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()}"
         snap("12_stats") {
             StatsScreen(history = hist, playerRankText = label, onBack = {}, onReset = {})
         }

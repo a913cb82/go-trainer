@@ -31,6 +31,25 @@ object GameFlow {
     fun preloadWanted(humanToMove: Boolean, engineReady: Boolean): Boolean =
         humanToMove && !engineReady
 
+    /**
+     * Whether the resumed-game engine resync (process spawn + model load +
+     * board replay) must raise the thinking indicator: exactly when a
+     * follow-up engine query will be issued (bot reply, or candidates the
+     * human never saw). Mirrors the follow-up branch in GameViewModel init.
+     * Otherwise the app sits on a dead board for seconds with no indicator.
+     */
+    fun resyncThinkingWanted(
+        toMove: Int,
+        playerColor: Int,
+        choiceCount: Int,
+        candidatesPresent: Boolean,
+        reviewing: Boolean,
+    ): Boolean {
+        if (toMove != playerColor) return true // botReply() follows unconditionally
+        // Human to move: requestCandidates() follows only when it won't early-return.
+        return !reviewing && choiceCount != 0 && !candidatesPresent
+    }
+
     /** One bot-reply winrate step: the appended list + the surviving flag. */
     data class WinrateStep(val winrates: List<Double>, val pendingFreePly: Boolean)
 
@@ -105,17 +124,14 @@ object GameFlow {
     }
 
     /**
-     * Automatch rung for a target winrate: invert the expected score, snap
-     * to the nearest ladder rung, clamp at the ends. Pure; the ViewModel
-     * supplies the live player rating.
+     * Automatch rung for a target winrate: invert the WHR expected score,
+     * snap to the nearest ladder rung, clamp at the ends. Pure; the ViewModel
+     * supplies the live player rating. Fixed anchors carry no uncertainty,
+     * so the inversion is exact (no g-factor).
      */
     fun automatchRung(playerRating: Double, targetWinrate: Int): Int {
         val e = targetWinrate.coerceIn(10, 90) / 100.0
-        val muP = (playerRating - 1500.0) / Glicko2.SCALE
-        val phiBot = BotRatings.BOT_RD / Glicko2.SCALE
-        val g = 1.0 / kotlin.math.sqrt(1.0 + 3.0 * phiBot * phiBot / (kotlin.math.PI * kotlin.math.PI))
-        val muB = muP + kotlin.math.ln((1.0 - e) / e) / g
-        val rank = BotRatings.ratingToRank(Glicko2.SCALE * muB + 1500.0)
-        return rank.roundToInt().coerceIn(0, 38)
+        val oppWhr = playerRating + WhrAnchors.ELO_SCALE * kotlin.math.log10((1.0 - e) / e)
+        return WhrAnchors.whrToRank(oppWhr).roundToInt().coerceIn(0, 38)
     }
 }

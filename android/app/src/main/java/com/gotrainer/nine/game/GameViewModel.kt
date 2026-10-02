@@ -130,14 +130,27 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             // The persistent engine board died with the process: replay the
             // moves back in, then re-issue the in-flight query. Bails if the
             // user started a new game while the engine was still warming.
+            // The replay includes the cold-start load, so raise the thinking
+            // indicator now when a query will follow — otherwise the board
+            // sits dead for seconds with no feedback.
             val seq = gameSeq
+            if (GameFlow.resyncThinkingWanted(
+                    toMove = cur.toMove,
+                    playerColor = cur.playerColor,
+                    choiceCount = cur.choiceCount,
+                    candidatesPresent = cur.candidates != null,
+                    reviewing = cur.reviewIdx != null,
+                )
+            ) {
+                _state.value = cur.copy(isThinking = true)
+            }
             viewModelScope.launch {
                 try {
                     engine().newGame(cur.rank)
                     for (m in cur.history) engine().playMove(m.color, m.x, m.y)
                 } catch (e: Exception) {
                     Log.e(TAG, "engine resync failed", e)
-                    _state.value = _state.value.copy(error = e.message ?: "Engine error")
+                    _state.value = _state.value.copy(isThinking = false, error = e.message ?: "Engine error")
                     return@launch
                 }
                 if (seq != gameSeq) return@launch
@@ -274,8 +287,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             // rung, so reopening the sheet in Fixed shows what was played.
             var picked = rank
             if (difficulty == Difficulty.AUTOMATCH) {
-                val rating = PlayerRating.rate(settings.ratedHistory.first())
-                val rung = GameFlow.automatchRung(rating.rating, t)
+                val rating = PlayerWhr.rate(settings.ratedHistory.first())
+                val rung = GameFlow.automatchRung(rating.whr, t)
                 picked = Rank.ALL[rung]
             }
             settings.setRank(picked)
@@ -294,13 +307,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Live player rank text (rating folds are milliseconds; recompute freely). */
+    /** Live player rank text (WHR refits are milliseconds; recompute freely). */
     private suspend fun updatePlayerRankText() {
-        val r = PlayerRating.rate(settings.ratedHistory.first())
-        val dev = BotRatings.rankDeviation(r.rating, r.rd).roundToInt()
+        val r = PlayerWhr.rate(settings.ratedHistory.first())
+        val dev = WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()
         _state.value = _state.value.copy(
-            playerRankText = "${BotRatings.playerLabel(r.rating, r.rd)} ±$dev",
-            playerRating = r.rating,
+            playerRankText = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±$dev",
+            playerRating = r.whr,
         )
     }
 

@@ -102,8 +102,8 @@ data class GameState(
     val targetWinrate: Int = 50,
     /** Live player rank, e.g. "30k? ±12". */
     val playerRankText: String = "30k? ±12",
-    /** Live player μ for the automatch preview; defaults to the 30k start. */
-    val playerRating: Double = BotRatings.START_RATING,
+    /** Live player WHR for the automatch preview; defaults to the 30k start. */
+    val playerRating: Double = WhrAnchors.RUNG0_WHR,
     /** Pop overlay for the last play's captures; transient, never persisted. */
     val captureFx: CaptureFx? = null,
     /** Settle overlay for the last play's stone; transient, never persisted. */

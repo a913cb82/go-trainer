@@ -1,0 +1,98 @@
+package com.gotrainer.nine
+
+import com.gotrainer.nine.game.Whr
+import com.gotrainer.nine.game.WhrAnchors
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * Phase 2 of the Glicko-2 -> WHR migration: the WHR solver over the human's
+ * single time-chain with fixed bot anchors. Reference values come from an
+ * independent Python port of the same Newton/Thomas math (cross-checked
+ * there against direct matrix inversion to 1e-13).
+ *
+ * The headline property under test: a sustained overperformance streak must
+ * move the estimate fast and keep uncertainty up (no Glicko-style collapse).
+ */
+class WhrTest {
+    private val rung10 = WhrAnchors.table[10]
+
+    private fun wins(n: Int, spacing: Int = 1) =
+        List(n) { i -> Whr.Game(day = i * spacing, oppWhr = rung10, score = 1.0) }
+
+    @Test fun `empty history returns the prior exactly`() {
+        val r = Whr.rate(emptyList())
+        assertEquals(525.0, r.whr, 1e-9)
+        assertEquals(245.66, r.unc, 0.05)
+    }
+
+    @Test fun `one win jumps toward the stronger opponent`() {
+        val r = Whr.rate(listOf(Whr.Game(0, rung10, 1.0)))
+        assertEquals(751.95, r.whr, 0.5)
+        assertEquals(228.1, r.unc, 0.5)
+    }
+
+    @Test fun `ten straight wins cross the bot and stay uncertain`() {
+        val r = Whr.rate(wins(10))
+        assertEquals(1194.14, r.whr, 1.0)
+        // The anti-crawl proof: the estimate passes the beaten bot's rating.
+        assertTrue("rating ${r.whr} must cross rung10 $rung10", r.whr > rung10)
+        // Uncertainty shrinks with evidence but never collapses toward zero.
+        assertTrue("unc ${r.unc} must stay responsive", r.unc > 150.0 && r.unc < 220.0)
+    }
+
+    @Test fun `time gaps widen uncertainty`() {
+        val dense = Whr.rate(wins(10, spacing = 1))
+        val spread = Whr.rate(wins(10, spacing = 10))
+        assertEquals(1199.37, spread.whr, 1.0)
+        assertTrue("spread ${spread.unc} must exceed dense ${dense.unc}", spread.unc > dense.unc)
+    }
+
+    @Test fun `mixed evidence sharpens the estimate`() {
+        val mixed = Whr.rate(wins(5) + List(5) { i -> Whr.Game(5 + i, rung10, 0.0) })
+        assertEquals(760.23, mixed.whr, 1.0)
+        assertEquals(105.0, mixed.unc, 1.0)
+        assertTrue(mixed.unc < Whr.rate(wins(10)).unc)
+    }
+
+    @Test fun `loss draw win order correctly`() {
+        val loss = Whr.rate(listOf(Whr.Game(0, rung10, 0.0))).whr
+        val draw = Whr.rate(listOf(Whr.Game(0, rung10, 0.5)))
+        val win = Whr.rate(listOf(Whr.Game(0, rung10, 1.0))).whr
+        assertEquals(613.47, draw.whr, 1.0)
+        assertTrue(loss < draw.whr && draw.whr < win)
+    }
+
+    @Test fun `ten straight losses sink below the ladder and clamp on display`() {
+        val r = Whr.rate(List(10) { i -> Whr.Game(i, rung10, 0.0) })
+        assertEquals(309.30, r.whr, 1.0)
+        assertEquals(0.0, WhrAnchors.whrToRank(r.whr), 0.0)
+    }
+
+    @Test fun `long streaks converge past the beaten bot`() {
+        // Regression: cold-start Newton diverged here (saturated likelihood,
+        // singular Hessian). The backtracking line search must converge.
+        val opp = WhrAnchors.table[20]
+        val games = List(20) { i -> Whr.Game(day = i, oppWhr = opp, score = 1.0) }
+        val r = Whr.rate(games)
+        assertEquals(1745.80, r.whr, 1.0)
+        assertTrue(r.whr.isFinite() && r.unc.isFinite())
+        assertTrue("rating ${r.whr} must cross rung20 $opp", r.whr > opp)
+        assertTrue("unc ${r.unc} must stay responsive", r.unc > 150.0 && r.unc < 220.0)
+    }
+
+    @Test fun `trajectory follows the games and ends at the current rating`() {
+        val games = wins(10)
+        val traj = Whr.trajectory(games)
+        val cur = Whr.rate(games)
+        assertEquals(10, traj.size)
+        assertEquals(cur.whr, traj.last().whr, 1e-9)
+        assertEquals(cur.unc, traj.last().unc, 1e-9)
+        assertTrue(traj.first().whr < traj.last().whr)
+    }
+
+    @Test fun `custom prior centers empty history`() {
+        assertEquals(1000.0, Whr.rate(emptyList(), priorWhr = 1000.0).whr, 1e-9)
+    }
+}

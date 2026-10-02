@@ -41,8 +41,10 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.gotrainer.nine.game.BotRatings
-import com.gotrainer.nine.game.PlayerRating
+import com.gotrainer.nine.game.PlayerWhr
 import com.gotrainer.nine.game.RatedGame
+import com.gotrainer.nine.game.Whr
+import com.gotrainer.nine.game.WhrAnchors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,8 +98,8 @@ fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> 
     var xMode by remember { mutableStateOf(StatsX.GAMES) }
     var window by remember { mutableStateOf(StatsWindow.ALL) }
     var confirmReset by remember { mutableStateOf(false) }
-    val rating = PlayerRating.rate(history)
-    val traj = PlayerRating.trajectory(history)
+    val rating = PlayerWhr.rate(history)
+    val traj = PlayerWhr.trajectory(history)
     val wins = history.count { it.score == 1.0 }
     val losses = history.count { it.score == 0.0 }
     if (confirmReset) {
@@ -147,7 +149,7 @@ fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> 
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "${rating.rating.roundToInt()} ± ${rating.rd.roundToInt()}",
+                        "${rating.whr.roundToInt()} ± ${rating.unc.roundToInt()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -195,7 +197,7 @@ fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> 
 @Composable
 private fun RatingGraph(
     history: List<RatedGame>,
-    traj: List<com.gotrainer.nine.game.Glicko2.Rating>,
+    traj: List<Whr.Rating>,
     xMode: StatsX,
     window: StatsWindow,
 ) {
@@ -212,10 +214,10 @@ private fun RatingGraph(
         Triple(history.takeLast(n), traj.takeLast(n), n == history.size)
     }
     val shownHist = shown.first
-    val display = remember(shown) { (if (shown.third) listOf(PlayerRating.START) else emptyList()) + shown.second }
-    val ranks = display.map { BotRatings.ratingToRank(it.rating) }
-    val uppers = display.map { BotRatings.ratingToRank(it.rating + it.rd) }
-    val lowers = display.map { BotRatings.ratingToRank(it.rating - it.rd) }
+    val display = remember(shown) { (if (shown.third) listOf(PlayerWhr.rate(emptyList())) else emptyList()) + shown.second }
+    val ranks = display.map { WhrAnchors.whrToRank(it.whr) }
+    val uppers = display.map { WhrAnchors.whrToRank(it.whr + it.unc) }
+    val lowers = display.map { WhrAnchors.whrToRank(it.whr - it.unc) }
     val ticks = remember(ranks) { rankAxisTicks(ranks.min(), ranks.max()) }
     // Games x keeps true game numbers so a window sits at history's right end.
     val gameNos = remember(shown) {

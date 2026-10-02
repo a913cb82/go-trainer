@@ -2,7 +2,7 @@ package com.gotrainer.nine.game
 
 /**
  * One rated game. Stores the bot's ladder RANK id ("8k"), not its rating:
- * the rating is resolved at recompute time via [BotRatings.forRank], so a
+ * the rating is resolved at recompute time via [WhrAnchors.whrForRank], so a
  * future tournament recalibration applies to old games automatically.
  *
  * Only free-choice games are ever recorded; suggestions games leave no trace.
@@ -18,30 +18,11 @@ data class RatedGame(
 )
 
 /**
- * Player rating = sequential Glicko-2 fold over history from the 30k start.
- * Computed on read; never stored. Even long histories fold in milliseconds.
+ * Rated-history codec. The rating itself lives in [PlayerWhr] (WHR refit on
+ * read, never stored); this file owns only the persisted encoding so game
+ * history survives engine changes with no migration.
  */
 object PlayerRating {
-    val START = Glicko2.Rating(BotRatings.START_RATING, BotRatings.START_RD, BotRatings.START_VOL)
-
-    fun rate(history: List<RatedGame>): Glicko2.Rating =
-        history.fold(START) { r, g ->
-            val botRating = BotRatings.forRank(Rank.fromId(g.botRankId))
-            Glicko2.update(r, listOf(Glicko2.Opponent(botRating, BotRatings.BOT_RD, g.score)))
-        }
-
-    /** Rating trajectory after each game (drives the stats graph). */
-    fun trajectory(history: List<RatedGame>): List<Glicko2.Rating> {
-        val out = ArrayList<Glicko2.Rating>(history.size)
-        var r = START
-        for (g in history) {
-            val botRating = BotRatings.forRank(Rank.fromId(g.botRankId))
-            r = Glicko2.update(r, listOf(Glicko2.Opponent(botRating, BotRatings.BOT_RD, g.score)))
-            out.add(r)
-        }
-        return out
-    }
-
     // --- Storage encoding: flat delimited string, no JSON dependency ----
     // "ts|rankId|black|score;..."  e.g. "1727000000000|8k|1|1.0;..."
 

@@ -1,10 +1,11 @@
 package com.gotrainer.nine
 
-import com.gotrainer.nine.game.BotRatings
-import com.gotrainer.nine.game.Glicko2
 import com.gotrainer.nine.game.PlayerRating
+import com.gotrainer.nine.game.PlayerWhr
 import com.gotrainer.nine.game.RatedGame
+import com.gotrainer.nine.game.WhrAnchors
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerRatingTest {
@@ -12,46 +13,34 @@ class PlayerRatingTest {
         RatedGame(ts, bot, black, score)
 
     @Test fun `no history is the 30k start`() {
-        val r = PlayerRating.rate(emptyList())
-        assertEquals(525.0, r.rating, 0.001)
-        assertEquals(350.0, r.rd, 0.001)
-        assertEquals("30k?", BotRatings.playerLabel(r.rating, r.rd))
-    }
-
-    @Test fun `single step matches a direct glicko update`() {
-        val hist = listOf(game("30k", 1.0))
-        val folded = PlayerRating.rate(hist)
-        val direct = Glicko2.update(
-            PlayerRating.START,
-            listOf(Glicko2.Opponent(BotRatings.forRank(com.gotrainer.nine.game.Rank.R30K), BotRatings.BOT_RD, 1.0)),
-        )
-        assertEquals(direct.rating, folded.rating, 1e-9)
-        assertEquals(direct.rd, folded.rd, 1e-9)
+        val r = PlayerWhr.rate(emptyList())
+        assertEquals(525.0, r.whr, 1e-9)
+        assertEquals("30k?", WhrAnchors.whrPlayerLabel(r.whr, r.unc))
     }
 
     @Test fun `wins climb and losses fall back`() {
-        val climb = PlayerRating.rate(listOf(game("30k", 1.0), game("29k", 1.0), game("28k", 1.0)))
-        assert(climb.rating > 525.0) { "three wins must leave 30k" }
-        val fall = PlayerRating.rate(
+        val climb = PlayerWhr.rate(listOf(game("30k", 1.0), game("29k", 1.0), game("28k", 1.0)))
+        assert(climb.whr > 525.0) { "three wins must leave 30k" }
+        val fall = PlayerWhr.rate(
             listOf(game("30k", 1.0), game("29k", 1.0), game("28k", 1.0), game("1k", 0.0)),
         )
-        assert(fall.rating < climb.rating) { "upset loss must undo progress" }
-        assert(fall.rd < 350.0) { "games must reduce uncertainty" }
+        assert(fall.whr < climb.whr) { "upset loss must undo progress" }
     }
 
     @Test fun `bot rank resolves through the table, not the record`() {
         // Same game, different table values -> different outcomes. Recalibration
-        // edits BotRatings.forRank; history needs no migration.
+        // edits WhrAnchors; history needs no migration.
         val hist = listOf(game("1d", 1.0))
-        assert(PlayerRating.rate(hist).rating > 525.0) { "beating 1d from 30k must jump" }
+        assert(PlayerWhr.rate(hist).whr > 525.0) { "beating 1d from 30k must jump" }
     }
 
-    @Test fun `trajectory has one point per game`() {
+    @Test fun `trajectory is one smoothed point per game`() {
+        // Smoothed (WHR-native), not causal: every point sees the full
+        // history, so early points already reflect later games.
         val hist = listOf(game("30k", 1.0, ts = 1L), game("30k", 0.0, ts = 2L))
-        val traj = PlayerRating.trajectory(hist)
+        val traj = PlayerWhr.trajectory(hist)
         assertEquals(2, traj.size)
-        assertEquals(PlayerRating.rate(hist.take(1)).rating, traj[0].rating, 1e-9)
-        assertEquals(PlayerRating.rate(hist).rating, traj[1].rating, 1e-9)
+        assertEquals(PlayerWhr.rate(hist).whr, traj[1].whr, 1e-9)
     }
 
     @Test fun `encoding round-trips and skips garbage`() {
