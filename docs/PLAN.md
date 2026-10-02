@@ -1,6 +1,9 @@
 # Plan — 9×9 KataGo Teaching Game
 
-> Executable checklist — run top to bottom. `README.md` is the pitch; this is the build order.
+> HISTORICAL — frozen. This was the build checklist for the React/Capacitor
+> era (M0–M5). The shipped app is native Kotlin/Compose. See
+> [ARCHITECTURE.md](ARCHITECTURE.md) for what replaced this. Kept for
+> context, not executed.
 
 ## Prerequisites
 
@@ -31,10 +34,10 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 - [x] **Frontend framework:** React + Vite
 - [x] **Backend language:** Node (Fastify)
-- [x] **KataGo deployment:** Hosted CPU server first; WASM deferred to M5 (no npm wrapper, speak JSON directly)
+- [x] **KataGo deployment:** Hosted CPU server first. WASM deferred to M5 (no npm wrapper, speak JSON directly)
 - [x] **Board lib:** custom SVG `GobanView.tsx` + `@sabaki/go-board` 1.4.3 — reuse rules, not board widget
 - [x] **SGF:** `@sabaki/sgf` 3.5.0
-- [x] **Capacitor vs TWA:** Capacitor Native — chosen for on-device KataGo (Eigen `arm64-v8a`); PWA alone needs remote server
+- [x] **Capacitor vs TWA:** Capacitor Native — chosen for on-device KataGo (Eigen `arm64-v8a`). PWA alone needs remote server
 
 ---
 
@@ -67,13 +70,13 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 - [x] Rank thresholds per LEARNING_DESIGN, dedup/shuffle, `n` shrink if needed
 - [x] Free-play toggle vs choice, review slider, pass/undo, localStorage rank/n/strategy
-- [x] Winrate history tracked; blunder-streak hook ready
+- [x] Winrate history tracked. Blunder-streak hook ready
 - [ ] TODO: ownership heatmap overlay, atari haptics, spaced-repetition store (next iteration)
 
 ## M4 — Android (Capacitor Native, on-device) — chosen (1)
 
 - [ ] Native KataGo: NDK `arm64-v8a` Eigen build, `katago` + `b18c384`/`strong` in `filesDir`, `ProcessBuilder` plugin (same JSON protocol)
-- [ ] Transport: `katagoClient.ts` → `Capacitor.isNativePlatform() ? Plugin : fetch('/api')` — keeps WSL `:3001` working; same `dist/`
+- [ ] Transport: `katagoClient.ts` → `Capacitor.isNativePlatform() ? Plugin : fetch('/api')` — keeps WSL `:3001` working. Same `dist/`
 - [ ] PWA + Capacitor: `cap init/add/sync`, `cap open android`, PWA audit (icons 512, `standalone`, Workbox), touch/haptics/safe-area, first-launch model download
 - [ ] Store: signed AAB → Play Console
 
@@ -81,7 +84,7 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 ## M5 — Stretch
 
-- [ ] KataGo WASM alternative (deferred — Native chosen; `katago-wasm` + `SharedArrayBuffer` threading, no native plugin)
+- [ ] KataGo WASM alternative (deferred — Native chosen. `katago-wasm` + `SharedArrayBuffer` threading, no native plugin)
 - [ ] Puzzle mode: generate puzzles from player's blunders (store worst 2% moves, drill them)
 - [ ] Accounts & sync: Supabase/Firebase for game history
 - [ ] 13×13 / 19×19 toggle
@@ -93,10 +96,10 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 | Risk | Mitigation |
 |---|---|
-| KataGo cost/latency | 150 visits on 9×9 CPU fine; cache; WASM fallback M5 |
-| HumanSL rank flag unknown | Spike M1 `katago --help`; fallback single model + interpolation |
-| Small-screen board | Shudan scales; test 360×640; `touch-action:none` only on board |
-| Candidates feel arbitrary | Log `P_h` vs `W_s`; tune thresholds with dan review |
+| KataGo cost/latency | 150 visits on 9×9 CPU is fine. Cache results. WASM fallback in M5 |
+| HumanSL rank flag unknown | Spike M1 `katago --help`. Fallback single model + interpolation |
+| Small-screen board | Shudan scales. Test 360×640. `touch-action:none` only on board |
+| Candidates feel arbitrary | Log `P_h` vs `W_s`. Tune thresholds with dan review |
 
 ## Testing
 
@@ -106,7 +109,7 @@ type Rank = '15k'|...|'3d' // maps to KataGo humanSLProfile
 
 ## Definition of Ready for v0
 
-- New game → pick rank → 9×9 vs HumanSL → n-choice each turn → feedback + graph → scoring → SGF dl → PWA installable → AAB builds
+- New game leads through pick rank, 9×9 vs HumanSL, n-choice each turn, feedback plus graph, scoring, and SGF download. Then PWA installable, then AAB builds.
 
 ## Open Questions
 

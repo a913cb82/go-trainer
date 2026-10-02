@@ -1,72 +1,63 @@
 # Architecture
 
-```
-Browser PWA (app/) --HTTPS--> Server (server/)            # PC/dev: remote katago
-  Vite/React/SVG  POST /candidates   Node -> katago analysis
-  Zustand         POST /genmove       ├─ HumanSL model
-  Workbox cache   POST /evaluate     └─ Strong model
+Native Android app (Kotlin/Compose). Kotlin is the programming language.
+Compose is Android's UI toolkit. One screen owns the game. A setup gate owns
+the engine files. The `app/` web client and `server/` PC engine are
+development-only and sit outside this picture.
 
-Android (Capacitor): WebView --bridge--> Native plugin -> katago (NDK Eigen arm64, on-device)
-  same dist/ + filesDir models (first-launch download)
-```
+## Screens
 
-Offline: `@sabaki/go-board` handles legality; on Android the `server/` runs on-device via plugin (no remote).
+`MainActivity` shows `SetupScreen` until `SetupViewModel` reports Ready.
+Ready means setup has staged the engine binary and downloaded the models.
+Then it shows `GameScreen`. New games open from a sheet (`NewGameScreen`). Stats open
+as an overlay (`StatsScreen`).
 
-Dual runtime (single codebase): `app/src/lib/katagoClient.ts` abstracts transport — `Capacitor.isNativePlatform() ? KataGoPlugin.query() : fetch('/api')`. Same types/protocol, WSL dev on `:3001` unchanged.
+## Game core (`game/` package)
 
-## Frontend `app/`
+- `GameViewModel`: the only state owner. It persists every state change
+  through DataStore. DataStore is Android's settings storage. It holds
+  settings, rated history, and the full game snapshot. Quitting resumes
+  exactly where the game stopped, including review position and candidates.
+- `GameFlow`: pure game-flow decisions (opening move, resync indicator,
+  automatch, rated-game bookkeeping). It has zero Android imports and full
+  unit tests.
+- `GoBoard`: rules (capture, ko, suicide). Ko is a repeating position the
+  rules forbid. `Scoring`, `Sgf`: result text and export. SGF is the standard
+  text format for Go game records.
+- Thinking indicator: a single `isThinking` flag covers engine load and
+  search alike. The player cannot tell them apart, by design.
 
-```
-app/src/
-  components/Board/  # GobanView.tsx custom SVG (faint candidates, points feedback)
-  components/        # RankSelector, WinrateGraph
-  lib/               # goban.ts (→ @sabaki/go-board), sgf.ts (→ @sabaki/sgf), katagoClient.ts
-  store/gameStore.ts # Zustand
-```
+## Engine (`engine/` package)
 
-State: `board, history, turn, rank, n, strategy, candidates (shuffled), evaluations, winrateHistory, status`.
+On-device KataGo over GTP (`KataGoGtpEngine`). GTP is the text protocol that
+drives KataGo. The first use spawns the process and loads the models. Then a
+persistent board serves all queries for the game. Split nets do the work: a
+small net searches moves, a human net steers selection toward your rank
+(see [KATAGO_INTEGRATION.md](KATAGO_INTEGRATION.md)). A visit is one
+simulated continuation. Replies use a small visit budget, candidate queries
+a much larger one (both live in `KataGoGtpEngine`). The app requires
+KataGo: no mocks, no fallbacks.
 
-## Backend `server/`
+## Rating
 
-```
-server/src/
-  index.ts, katago.ts, types.ts
-models/.gitignore, Dockerfile
-```
+Free-choice games write a pending loss record on the player's first ply. A
+ply is one move by one player. Abandoned games stay losses. Scoring settles
+the record. The rating is a WHR refit over stored history, recomputed on
+read — never stored, so no migration. WHR (Whole-History Rating) tracks how
+skill changes over time. Graphs and labels show rank, never raw numbers
+(see [RATINGS.md](RATINGS.md)).
 
-One long-lived `katago analysis` per model, multiplexed over stdin/stdout JSON lines (Node on PC, `ProcessBuilder` via Capacitor plugin on Android). No npm wrapper — direct JSON (skip `@sabaki/gtp`).
+## Candidates and feedback
 
-## API
+Each turn offers best and worst moves for the chosen strategy, or free play.
+Feedback reveals points ordered by strong winrate after the pick. Strong
+winrate is KataGo's estimate from full-strength search. The winrate graph
+doubles as the review slider
+(see [LEARNING_DESIGN.md](LEARNING_DESIGN.md)).
 
-**POST /candidates**
-```json
-// req: { board, toMove, rank, n, strategy, history, komi }
-// resp: { moves: [{x,y,label,humanPolicy,strongWinrate,strongScore,scoreGap,tag}], meta: {humanModel, strongModel, visits} }
-```
-Moves ranked by `humanPolicy`; feedback gap `G = bestPoints - points` (rank-graduated).
+## See also
 
-**POST /genmove**
-```json
-// req: { board, toMove, rank, history, komi }
-// resp: { move: {x,y,pass}, winrate, scoreLead }
-```
-
-**POST /evaluate**
-```json
-// req: { board, move, toMove, rank, history }
-// resp: { winrate, scoreLead, ownership: number[9][9] }
-```
-
-## Turn Flow
-
-1. `POST /candidates` → server picks candidates (see LEARNING_DESIGN, by `humanPolicy` + points thresholds).
-2. Render faint circles, no values.
-3. Player picks → local `go-board` legality + reveal points feedback (halo + badges).
-4. `POST /genmove` → opponent reply (sampled by `humanPolicy`).
-
-Scoring: two passes → `@sabaki/go-board` area score + strong `scoreLead` advisory.
-
-## Config
-
-- `komi: 7` (or 7.5 — freeze early, affects HumanSL).
-- CORS: PWA origin only. Rate-limit by board hash. Models not in git.
+- [TECH_STACK.md](TECH_STACK.md) — why these libraries and not others
+- [KATAGO_INTEGRATION.md](KATAGO_INTEGRATION.md) — engine wiring and models
+- [RATINGS.md](RATINGS.md) — WHR design and rank mapping
+- [LEARNING_DESIGN.md](LEARNING_DESIGN.md) — candidate mix and feedback rules

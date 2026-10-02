@@ -1,49 +1,54 @@
 # Learning Design
 
-Every player turn shows `n` moves (A–E) to choose from. The teaching signal is *which* n.
+Every player turn shows candidate moves to choose from. A candidate is one
+move you may play. The teaching signal is *which* moves the app offers.
 
 ## Inputs
 
-- `P_h(m)`: HumanSL policy at selected rank (how often a human at that rank plays m).
-- `W_s(m)`: Strong KataGo win-rate. `G(m) = max(W_s) - W_s(m)` = gap to best.
+- `P_h(m)`: HumanSL policy at the selected rank (how often a human at that
+  rank plays move m). HumanSL is KataGo's mode that copies human play. One
+  `kata-analyze` pool serves each turn. A visit is one simulated
+  continuation.
+- Loss(m): predicted points dropped against the strong best
+  (`bestScore - strongScore`).
 
 ## Strategies
 
-**S1 — Good-vs-Tempting-Bad (default): `n=5` → 3 good + 2 tempting bad, shuffled, unlabeled.**
-- Good: `P_h` top-8, `G ≤ 1–1.5 pts`, strong top-10.
-- Tempting bad: `P_h` top-8, `G ≥ 2.5–4 pts` (tighter at higher rank). Classic human bias the player must learn to reject.
+The setup sheet offers two sliders — best moves and worst moves — or free
+choice with no suggestions. The live ranges sit in `NewGameScreen`.
+Strategies form named shapes over the same best/worst split:
 
-Rank thresholds (in predicted points, from `strongScore`/`scoreLead`):
+- **Good-vs-tempting** (default): lowest-loss human moves plus the
+  highest-loss moves a human at this rank would still play.
+- **Human-only**: most human moves, no score filter.
+- **Strong-only**: objectively best moves, for review.
+- **Tesuji**: the objective best (possibly rank-atypical) hidden among human
+  bad moves. Tesuji means a skillful tactical move.
+- **Blunder-check**: mostly good moves with one planted blunder. A blunder
+  is a very bad move.
+- **Split 3-2**: three good moves, two bad moves.
 
-| Rank | Good `G` | Bad `G` | Spread |
-|------|----------|---------|--------|
-| 15k–12k | ≤1.5 | ≥4.0 | ~5 pts |
-| 10k–8k  | ≤1.5 | ≥3.2 | ~4 pts |
-| 5k–3k   | ≤1.0 | ≥2.5 | ~3 pts |
-| 1k–3d   | ≤0.8 | ≥1.8 | ~2 pts |
-
-**S0 — Human top-N:** top-N by `P_h` only. Realistic but low contrast.
-
-**S2 — Find the tesuji:** 1 strong-best low-`P_h` + 4 high-`P_h` bad. Use sparingly (puzzle mode).
-
-**S3 — Blunder check:** 4 good + 1 huge gap `G ≥ 8–10%`. Good for early kyu.
-
-**S4 — Strong top-N:** top-N by `W_s`. For review mode.
-
-Default: S1. User can pick `n=3/5` and strategy per game.
+Selection re-ranks the single analyze pool — no extra query runs (see
+`CandidateSelector`). Tags are `good` / `ok` / `overconcentrated`.
+Overconcentrated means too many of your stones crowd one area. Both colors
+rank from their own side to move. Thin pools top up in character.
 
 ## Feedback (after pick only)
 
-- Reveal ordered by `W_s` with colors (green/yellow/red by `G`), `P_h%`, `Δ`, and rule-based tag (`atari`, `cut`, `empty triangle`).
-- Ownership heatmap toggle + win-rate sparkline.
+The reveal orders moves by strong winrate with the loss gap against best.
+Strong winrate is KataGo's estimate from full-strength search. The scope
+covers all moves or picked-only. No values show before the pick. The winrate
+graph doubles as the review slider. Winrate is the estimated chance to win.
+(Ownership heatmap: the engine stores ownership data at scoring, but no
+overlay exists yet.)
 
-No pre-pick win-rates.
+## Rated play
 
-## Edge Cases
+Only free-choice games rate (see [RATINGS.md](RATINGS.md)). Suggestions
+games always leave no trace, even opted in.
 
-- Filter illegal/suicide, deduplicate adjacent traps.
-- If not enough moves meet thresholds (endgame), reduce `n` or relax thresholds.
+## See also
 
-## Tuning
-
-Log `G(picked)` per turn; mean should trend to 0. Opt-in telemetry for bad-pick rate feeds threshold tuning.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — where candidates and feedback live
+- [RATINGS.md](RATINGS.md) — rated play and automatch
+- [KATAGO_INTEGRATION.md](KATAGO_INTEGRATION.md) — the analyze pool behind it

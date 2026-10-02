@@ -1,54 +1,57 @@
 # KataGo Integration
 
-## Models
+KataGo is a free AI program that plays Go. This app runs it on the phone.
 
-- **HumanSL:** `b28c512nbt-humanv0` (or `b18c384nbt-humanv0`). Single net conditioned on rank via `humanSLProfile` / rank param. Verify with `katago analysis -help`.
-- **Strong:** `b28c512nbt` for `W_s` ground truth.
+## On-device engine (shipped path)
 
-Models gitignored in `server/models/`; fetched via `server/scripts/download-models.sh`.
+The engine speaks GTP (`KataGoGtpEngine`). GTP is the text protocol that
+drives KataGo. No server runs. No WASM ships. No mocks exist — KataGo is
+required, and the app says so when files are missing.
 
-## Engine
+- **Start:** the app runs `/system/bin/linker64` on the bundled
+  `libkatago.so` with library paths wired. The first use spawns the process
+  and loads the models. One throwaway move warms the neural-net cache. Then
+  one persistent board serves all queries for the game.
+- **Models:** split nets (two brain files, one job each). The small search
+  net ships inside the app. The human steering net downloads once on the
+  setup screen, with resume and retry. File names and sizes live in
+  `ModelManager`.
+- **Queries:** bot moves use `kata-genmove_analyze`. Candidates use
+  `kata-analyze` with the human mode left on — candidates need the true
+  human policy (how often a human at your rank plays each move). Winrates
+  report BLACK-perspective (`reportAnalysisWinratesAs = BLACK` in
+  `gtp.cfg`. The ViewModel flips for White humans.) Scoring uses
+  `final_score` under Chinese rules with komi 7.5. Komi means White
+  moves second and receives 7.5 extra points.
+- **Profiles:** one `rank_<id>` profile per game rank. KataGo profiles
+  cover only part of our ladder, so weaker ranks clamp to the lowest
+  profile (the clamp lives in `profileFor`). `preaz_` (pre-AI-era openings)
+  is a possible follow-up selector, not the default.
+- **Budgets:** replies use a small visit budget, candidate queries a much
+  larger one (both live in `KataGoGtpEngine`). A visit is one simulated
+  continuation. Replies land under a second on warm hardware. First load
+  takes a few seconds.
 
-Spawn `katago analysis -model <bin.gz> -config analysis.cfg -config human.cfg`.
-Protocol: JSON lines over stdin/stdout. No npm lib — write ~15-line JSON handler (GTP libs `@sabaki/gtp` etc are text-protocol only, skip).
+Binary provenance, staging layout, and the install loop live in the
+phone-session notes, not here
+(see [ON_DEVICE.md](../android/docs/ON_DEVICE.md)).
 
-Query:
-```json
-{"id":"q1","moves":[],"rules":"japanese","komi":7,"boardXSize":9,"boardYSize":9,"board":[],"analyzeTurns":["B"]}
-```
+## Server engine (development only)
 
-Parse `moveInfos[].move, winrate, humanPrior, policy, scoreLead, ownership` for `P_h` and `W_s`. `humanPrior` is the raw HumanSL policy used for rank imitation.
-
-## HumanSL profiles and queries
-
-KataGo supports two rank-profile families:
-
-- `rank_<RANK>` — modern opening style (recommended for this app).
-- `preaz_<RANK>` — pre-AlphaZero/2016 opening style, useful only when intentionally imitating that era.
-
-For rank imitation, KataGo recommends setting `humanSLProfile`, preserving history with `ignorePreRootHistory=false`, requesting `includePolicy=true`, and sampling moves proportional to `humanPolicy` (even 1 visit is sufficient for raw imitation). The server now follows this for White and ranks candidate choices by `humanPolicy`; it also sends the real move history rather than reconstructing a fake row-major sequence.
-
-- **Candidates:** query both models on same position → compute `G`, pick per LEARNING_DESIGN thresholds → shuffle.
-- **Genmove:** query HumanSL@rank and sample from `humanPolicy`; pass only when KataGo's top result is pass.
-- Cache by board hash + rank.
-
-## Deployment
-
-- **PC/server:** `katago` binary + `models/` via `scripts/download-models.sh`; `server/libs/` for `libssl1.1`/`libzip5`. CPU fine for 9×9 ≤200 visits.
-- **Android (chosen):** NDK `arm64-v8a` Eigen build, `katago` + models in `filesDir`, spawned via Capacitor plugin (`ProcessBuilder`). No CUDA on device; Eigen is enough for 9×9/400 visits.
-
-## MCTS / Search-ahead (planned / M5)
-
-Real KataGo uses `maxVisits` MCTS. To improve "tempting bad" accuracy, could add 1-ply lookahead:
-
-- After candidate: simulate move `m`, find opponent's best reply `o` (via `strongWinrate` or quick MCTS with `maxVisits=50`), compute `G_after = best(W_s after o) - W_s(m)`. Use `G_after` instead of `G` for "bad" selection — teaches avoiding moves that give opponent key point.
-- Implementation: extend `katagoClient` with `POST /lookahead {board, move, maxVisits}`; server does quick `analysis` of 1-ply continuation. Fallback: client-side `toSignMap` + `isLegal` to simulate basic capture only.
-
-Real engine (`mode=real`) gets this for free via KataGo's MCTS (`maxVisits=200+`).
+`server/` spawns `katago analysis` (JSON lines over stdin/stdout) behind the
+same query shapes. It is the reference implementation. It is also the
+fallback when no device is at hand. Models stay out of git and arrive by
+script.
 
 ## TODO
 
-- [x] Binary + libzip/libssl fix done; `mode=real` confirmed.
-- [x] Real engine query protocol (JSON lines) working; `humanSLProfile` injected.
-- [ ] MCTS stub / 1-ply lookahead (optional, improves tempting-bad)
-- [ ] Verify `komi` 7.5 vs 7 effect; test 13×13 toggle; WASM deferred.
+- [x] On-device GTP path working (no remote server)
+- [x] Rank imitation through `humanSLProfile` with real move history
+- [ ] `preaz_` selector experiment (intentional pre-AI-era imitation)
+- [ ] 1-ply lookahead for "tempting bad" accuracy (optional polish)
+
+## See also
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — where the engine sits in the app
+- [ON_DEVICE.md](../android/docs/ON_DEVICE.md) — provenance, staging, install loop
+- [TECH_STACK.md](TECH_STACK.md) — shipped stack vs dev stack

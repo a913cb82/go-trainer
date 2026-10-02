@@ -1,38 +1,36 @@
 # Tech Stack
 
-Constraint: browser first, Android via same codebase.
+Two stacks: what ships, and what supports development. Do not mix them.
 
-## Frontend: PWA + Capacitor
+## Shipped: native Android
 
-- **Vite + TypeScript + React** + `vite-plugin-pwa` → installable, same `dist/` in Capacitor (`npx cap add android`)
-- **State:** Zustand
+- **Kotlin + Compose (Material3)** — all UI, single activity. Kotlin is the
+  programming language. Compose is Android's UI toolkit.
+- **Coroutines + Flow** — engine work runs off the main thread. `StateFlow`
+  holds the game state.
+- **DataStore Preferences** — Android's settings storage. It holds settings,
+  rated history, and the full game snapshot.
+- **JUnit4** — unit tests for pure logic. The `game/` package has no Android
+  imports.
+- **Paparazzi** — screenshot tests with no emulator.
 
-## Reuse — Don't Rewrite
+## Development only
 
-| Need | Library | Verdict |
-|------|---------|---------|
-| Rules (capture/ko/suicide) | `@sabaki/go-board` 1.4.3 MIT | **Reuse** — `Board.makeMove()` handles all. Alt `online-go/goban` 8.3.226 Apache-2.0 (heavier, adds scoring) |
-| Board UI (stones, faint candidates) | custom SVG `GobanView.tsx` | **Own** — `@sabaki/shudan` is Preact and crashes under React 19; own SVG is ~150 LOC |
-| SGF parse/stringify | `@sabaki/sgf` 3.5.0 MIT | **Reuse** — `sgf.parse`/`stringify`, 9×9 + variations |
+- **Web client (`app/`)**: Vite + React + TypeScript, Zustand for state,
+  `@sabaki/go-board` as the rules reference, `@sabaki/sgf` for game
+  records, Vitest + Playwright for tests.
+- **PC engine (`server/`)**: Node spawns `katago analysis` (JSON lines over
+  stdin/stdout) as the reference implementation. Models stay out of git and
+  arrive by script.
 
-```ts
-import GoBoard from '@sabaki/go-board'
-let b = GoBoard.fromDimensions(9,9)
-import * as sgf from '@sabaki/sgf'; sgf.parse(str)
-```
+## Engine delivery
 
-## Backend
+On-device KataGo (Eigen `arm64-v8a`) over GTP. Eigen is a math library that
+runs the neural nets on the phone CPU. GTP is the text protocol that drives
+KataGo. No CUDA runs on the device. No WASM ships. No remote server runs in
+the shipped path.
 
-- **Node** spawning `katago analysis`. No npm KataGo lib — speak Analysis JSON directly.
-- `@sabaki/gtp` 3.2.0 is GTP-only, skip for analysis engine.
-- Two nets: HumanSL + strong for `P_h`/`W_s`. Dockerized, `models/*.bin.gz` gitignored.
+## See also
 
-## KataGo Delivery
-
-- **Server first (M1).** **Android: Capacitor Native Eigen `arm64-v8a` on-device (M4, chosen).** WASM deferred to M5 (alternative, no native plugin).
-
-## Tooling
-
-Vitest + Playwright, ESLint/Prettier, Lighthouse CI.
-
-
+- [ARCHITECTURE.md](ARCHITECTURE.md) — how these pieces fit together
+- [KATAGO_INTEGRATION.md](KATAGO_INTEGRATION.md) — engine wiring and models
