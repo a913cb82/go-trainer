@@ -19,10 +19,10 @@ grades (9d strongest).
   doubt in the rating.
 - **Prior:** one virtual win plus one virtual loss against the 20k pin on
   the first day. New players start at 20k, uncertain.
-- **Opponents:** 29 fixed bot rungs (20k–9d), derived by probability-matching
-  OGS
-  expected scores and frozen in `WhrAnchors`. OGS (online-go.com) is the
-  Go server whose rank math seeded the table. Anchors carry zero variance
+- **Opponents:** 29 fixed bot rungs (20k–9d), FP2(3,3) fit to 2,120
+  bot-vs-bot games (tournament branch, tag `calibration-2026-10-03`;
+  rung-2 games excluded, 18k takes the smoothed value), 5k = 1500 pin.
+  Anchors carry zero variance
   and zero color advantage. Recalibration edits the table only. Old 30k–21k
   records resolve to the 20k anchor — the only config below the floor — so
   no history migration was needed.

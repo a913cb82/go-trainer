@@ -12,9 +12,9 @@ class RatingCurveTest {
         RatingCurve.CurvePoint(ver, whr, unc)
 
     @Test fun `version constant tracks point-value changes`() {
-        // v2: ladder starts at 20k (anchors dropped 30k–21k, prior moved).
+        // v3: tournament FP2 anchors (calibration-2026-10-03), 5k = 1500.
         // Bump on any solver/W2/time/anchor change; backfill heals the cache.
-        assertEquals(2, Whr.CURVE_VERSION)
+        assertEquals(3, Whr.CURVE_VERSION)
     }
 
     @Test fun `no cache means every index needs computing`() {

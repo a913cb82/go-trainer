@@ -226,3 +226,10 @@ engine. The PC `server/` remains as a dev tool, unreferenced by the app.
 - [KATAGO_INTEGRATION.md](../../docs/KATAGO_INTEGRATION.md) — the curated
   engine picture (this file holds the session evidence behind it)
 - [ENGINE_PLAN.md](ENGINE_PLAN.md) — the brainstorm this work closed out
+
+## 2026-10-03 — tournament FP2 anchors land (CURVE_VERSION 3)
+- Build md5 59069f9cd1f42f801e6046f13f83ae78, install -r Success, no crash.
+- `WhrAnchors` now FP2(3,3) no-18k fit, 5k=1500 (20k 1031.67 … 9d 2066.19).
+- Stats on 209-game history: 10k ±1, curve backfilled under v3, per-game
+  points render, no stuck "Updating" state. (Two black screencaps during
+  verify were a resume-transition artifact, not a crash — app renders fine.)

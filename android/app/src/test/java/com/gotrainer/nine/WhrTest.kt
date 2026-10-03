@@ -29,13 +29,13 @@ class WhrTest {
 
     @Test fun `one win jumps toward the stronger opponent`() {
         val r = Whr.rate(listOf(Whr.Game(0, rung10, 1.0)))
-        assertEquals(1096.27, r.whr, 0.5)
-        assertEquals(250.99, r.unc, 0.5)
+        assertEquals(1231.15, r.whr, 0.5)
+        assertEquals(221.46, r.unc, 0.5)
     }
 
     @Test fun `ten straight wins cross the bot and stay uncertain`() {
         val r = Whr.rate(wins(10))
-        assertEquals(1618.65, r.whr, 1.0)
+        assertEquals(1638.00, r.whr, 1.0)
         // The anti-crawl proof: the estimate passes the beaten bot's rating.
         assertTrue("rating ${r.whr} must cross rung10 $rung10", r.whr > rung10)
         // Uncertainty shrinks with evidence but never collapses toward zero.
@@ -45,14 +45,14 @@ class WhrTest {
     @Test fun `time gaps widen uncertainty`() {
         val dense = Whr.rate(wins(10, spacing = 1))
         val spread = Whr.rate(wins(10, spacing = 10))
-        assertEquals(1623.80, spread.whr, 1.0)
+        assertEquals(1643.29, spread.whr, 1.0)
         assertTrue("spread ${spread.unc} must exceed dense ${dense.unc}", spread.unc > dense.unc)
     }
 
     @Test fun `mixed evidence sharpens the estimate`() {
         val mixed = Whr.rate(wins(5) + List(5) { i -> Whr.Game(5 + i, rung10, 0.0) })
-        assertEquals(1175.56, mixed.whr, 1.0)
-        assertEquals(108.13, mixed.unc, 1.0)
+        assertEquals(1208.77, mixed.whr, 1.0)
+        assertEquals(103.64, mixed.unc, 1.0)
         assertTrue(mixed.unc < Whr.rate(wins(10)).unc)
     }
 
@@ -60,13 +60,13 @@ class WhrTest {
         val loss = Whr.rate(listOf(Whr.Game(0, rung10, 0.0))).whr
         val draw = Whr.rate(listOf(Whr.Game(0, rung10, 0.5)))
         val win = Whr.rate(listOf(Whr.Game(0, rung10, 1.0))).whr
-        assertEquals(930.81, draw.whr, 1.0)
+        assertEquals(1100.47, draw.whr, 1.0)
         assertTrue(loss < draw.whr && draw.whr < win)
     }
 
     @Test fun `ten straight losses sink below the ladder and clamp on display`() {
         val r = Whr.rate(List(10) { i -> Whr.Game(i, rung10, 0.0) })
-        assertEquals(667.36, r.whr, 1.0)
+        assertEquals(774.10, r.whr, 1.0)
         assertEquals(0.0, WhrAnchors.whrToRank(r.whr), 0.0)
     }
 
@@ -76,7 +76,7 @@ class WhrTest {
         val opp = WhrAnchors.table[20]
         val games = List(20) { i -> Whr.Game(day = i, oppWhr = opp, score = 1.0) }
         val r = Whr.rate(games)
-        assertEquals(2406.58, r.whr, 1.0)
+        assertEquals(2299.08, r.whr, 1.0)
         assertTrue(r.whr.isFinite() && r.unc.isFinite())
         assertTrue("rating ${r.whr} must cross rung20 $opp", r.whr > opp)
         assertTrue("unc ${r.unc} must stay responsive", r.unc > 150.0 && r.unc < 220.0)
@@ -119,7 +119,7 @@ class WhrTest {
         // one day node (flat for 5-20 games); causal accumulates each game's
         // likelihood in its own prefix.
         val causal = Whr.causalTrajectory(listOf(Whr.Game(0, rung10, 1.0), Whr.Game(0, rung10, 0.0)))
-        assertEquals(1096.27, causal[0].whr, 0.5)
+        assertEquals(1231.15, causal[0].whr, 0.5)
         assertTrue("second game must move its own point, got ${causal[1].whr}", causal[1].whr < causal[0].whr)
         assertTrue("balanced evidence stays above the prior, got ${causal[1].whr}", causal[1].whr > WhrAnchors.RUNG0_WHR)
     }

@@ -5,50 +5,50 @@ import kotlin.math.pow
 /**
  * WHR-scale fixed bot anchors.
  *
- * Each rung was derived by probability-matching (adjacent OGS expected
- * scores inverted through the Elo logistic, rung 0 (20k) pinned) and
- * then frozen here so the Glicko derivation could be deleted. Recalibration
- * (e.g. from bot-vs-bot tournaments) edits this table; stored histories
- * resolve anchors at recompute time, so old games follow automatically.
+ * Each rung is the FP2(3,3) fractional-polynomial fit to 2,120 bot-vs-bot
+ * games (tournament branch, tag calibration-2026-10-03; rung-2 games
+ * excluded, 18k takes the smoothed value), pinned at 5k = 1500.
+ * Recalibration edits this table; stored histories resolve anchors at
+ * recompute time, so old games follow automatically.
  */
 object WhrAnchors {
     /** Elo-scale spread: P(win) = 1 / (1 + 10^(-gap / 400)). */
     const val ELO_SCALE = 400.0
 
     /** Absolute pin: rung 0 (20k, the HumanSL floor) sits at this WHR. */
-    const val RUNG0_WHR = 803.641111022468
+    const val RUNG0_WHR = 1031.666105
 
     /** WHR rating per ladder rung, weakest first (frozen derivation, see above). */
     val table: List<Double> = listOf(
-        803.641111022468,
-        838.7072357832695,
-        875.321287821848,
-        913.5515974391317,
-        953.4695112470157,
-        995.1495253176653,
-        1038.6694242104384,
-        1084.1104261358887,
-        1131.5573345277571,
-        1181.0986963058199,
-        1232.8269671249463,
-        1286.8386839187663,
-        1343.2346450599453,
-        1402.1200984732918,
-        1463.604938052762,
-        1527.8039087489153,
-        1594.83682070957,
-        1664.828772873284,
-        1737.9103864329497,
-        1814.2180486051907,
-        1893.8941671604941,
-        1977.087436189095,
-        2063.953113598583,
-        2154.653310861118,
-        2249.3572955509812,
-        2348.241807237072,
-        2451.4913873198752,
-        2559.298723428455,
-        2671.8650090201986,
+        1031.666105,
+        1034.145917,
+        1039.779011,
+        1049.284143,
+        1063.127853,
+        1081.591029,
+        1104.807239,
+        1132.787811,
+        1165.439563,
+        1202.578012,
+        1243.937616,
+        1289.179934,
+        1337.900289,
+        1389.633322,
+        1443.857674,
+        1500.000000,
+        1557.438449,
+        1615.505700,
+        1673.491646,
+        1730.645776,
+        1786.179301,
+        1839.267078,
+        1889.049340,
+        1934.633271,
+        1975.094448,
+        2009.478156,
+        2036.800606,
+        2056.050047,
+        2066.187811,
     )
 
     /** Fixed WHR rating of the bot at a ladder rung. */
