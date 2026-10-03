@@ -1,8 +1,8 @@
-"""Shape-zoom plot: free, sigmoid, skip-18k variants, cube root.
+"""Stripped shape plot: everything ignores 18k. Usage: plot_shapes.py [out].
 
-Usage: python3 tournament/plot_shapes.py [out.png].
-Skip-18k variants fit on 28 rungs (rung 2 excluded) and evaluate at all
-29, showing what each shape says about 18k without seeing it.
+Free values refit on games not involving rung 2 (28 identified rungs;
+18k left blank). FP2/bezier-3/5/6 fit on those 28 and evaluated at all
+29, so each curve's 18k prediction shows in the gap. 5k pin throughout.
 """
 
 import json
@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from tournament import fit, model_select as M, shapes as S, bezier, smooth
+from tournament import fit, model_select as M, bezier
 from tournament.schedule import rung_label
 
 rows = []
@@ -26,21 +26,14 @@ for f in ["tournament/runs/wave1/games.jsonl",
         rows.append({"black": r["black"], "white": r["white"],
                      "score": r["score"]})
 
-xs_rel, ses = fit.fit_rungs(rows)
+norows = [r for r in rows if r["black"] != 2 and r["white"] != 2]
+print("games without 18k: %d / %d" % (len(norows), len(rows)))
+free28, se28 = fit.fit_rungs(norows, n_rungs=29)
+
 xs = [float(i + 1) for i in range(29)]
-PIN = xs_rel[15]
-
-free = [v - PIN + 1500 for v in xs_rel]
-
-sig_full = S.sigmoid_fits(xs, xs_rel)
-sig = [sig_full(x) - sig_full(16.0) + 1500 for x in xs]
-
 keep = [i for i in range(29) if i != 2]
-sig_skip = S.sigmoid_fits([xs[i] for i in keep], [xs_rel[i] for i in keep])
-sig_s = [sig_skip(x) - sig_skip(16.0) + 1500 for x in xs]
+tx, ty = [xs[i] for i in keep], [free28[i] for i in keep]
 
-# FP2, powers selected on 28 rungs (no 18k), evaluated at all 29.
-tx, ty = [xs[i] for i in keep], [xs_rel[i] for i in keep]
 best, be = None, None
 for i, p1 in enumerate(M.POWERS):
     for p2 in M.POWERS[i:]:
@@ -49,37 +42,33 @@ for i, p1 in enumerate(M.POWERS):
         e = sum((pred(x) - y) ** 2 for x, y in zip(tx, ty))
         if be is None or e < be:
             best, be = (p1, p2), e
-fp_fn = M._ols_predictor(lambda x, ps=best: M.fp_terms(x, ps))
-fp_skip = fp_fn(tx, ty)
-fp_s = [fp_skip(x) - fp_skip(16.0) + 1500 for x in xs]
 print("skip-18k FP2 powers:", best)
+fp = M._ols_predictor(lambda x, ps=best: M.fp_terms(x, ps))(tx, ty)
 
-# Bezier: fixed-knot control heights by OLS (cubic == cubic regression).
-b3 = bezier.bezier_fits(3)(xs, xs_rel)
-bez3 = [b3(x) - b3(16.0) + 1500 for x in xs]
-b6 = bezier.bezier_fits(6)(xs, xs_rel)
-bez6 = [b6(x) - b6(16.0) + 1500 for x in xs]
-sma_raw = smooth.sma(smooth.substitute(xs_rel))
-sma_c = [v - sma_raw[15] + 1500 for v in sma_raw]
-seg3 = smooth.seg3_fits(xs, xs_rel)
-seg_c = [seg3(x) - seg3(16.0) + 1500 for x in xs]
+curves = {"FP2 %s" % (best,): [fp(x) for x in xs]}
+for deg in (3, 5, 6):
+    b = bezier.bezier_fits(deg)(tx, ty)
+    curves["bezier-%d" % deg] = [b(x) for x in xs]
+
+PIN = free28[15]
+free = [free28[i] - PIN + 1500 for i in keep]
+se = [se28[i] for i in keep]
+for name in curves:
+    v = curves[name]
+    c = v[15]
+    curves[name] = [a - c + 1500 for a in v]
 
 labels = [rung_label(i) for i in range(29)]
-xi = list(range(29))
 plt.figure(figsize=(13, 7))
-plt.errorbar(xi, free, yerr=ses, fmt="o", ms=3, capsize=2, alpha=0.5,
-             label="free fit (±SE)")
-plt.plot(xi, sig, "-", label="sigmoid")
-plt.plot(xi, sig_s, "--", label="sigmoid, 18k skipped")
-plt.plot(xi, fp_s, "-.", label="FP2 %s, 18k skipped" % (best,))
-plt.plot(xi, bez3, ":", lw=2, label="bezier-3 (== cubic)")
-plt.plot(xi, bez6, linestyle=(0, (3, 1, 1, 1)), label="bezier-6")
-plt.plot(xi, sma_c, "-", lw=1.5, label="SMA-3 (18k interpolated)")
-plt.plot(xi, seg_c, "-", lw=1.5, label="3-band linear (24/54/30)")
-plt.xticks(xi, labels, rotation=45)
+plt.errorbar(keep, free, yerr=se, fmt="o", ms=4, capsize=2, alpha=0.6,
+             label="free fit, no 18k games (±SE)")
+styles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1))]
+for (name, v), st in zip(sorted(curves.items()), styles):
+    plt.plot(range(29), v, linestyle=st, label=name)
+plt.xticks(range(29), labels, rotation=45)
 plt.ylabel("WHR (5k = 1500 pin)")
 plt.xlabel("bot rung")
-plt.title("Shape zoom: what the curves say about 18k")
+plt.title("All blind to 18k: what each shape predicts in the gap")
 plt.legend(loc="upper left")
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
