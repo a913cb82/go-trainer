@@ -25,6 +25,10 @@ accelerator chip. SNPE is Qualcomm's toolkit for it.
 - Installed `versionCode=1791020091` (`2026-10-03 10:37:31`, was `1790802817`
   from `2026-09-30`). Launch resumes mid-game (White to play, 30k) with
   engine warmup genmove `536ms`. No crash.
+- Causal-curve update `versionCode=1791021905` (`2026-10-03 11:05:46`, WiFi
+  push `3.1s` at `25.6 MB/s`, md5 matched). Same mid-game resumes, warmup
+  `527ms`, no crash. First Stats open will run the one-time curve backfill
+  in the background ("Updating rating curve…" until the cache completes).
 
 ## Prior state (2026-09-20)
 
