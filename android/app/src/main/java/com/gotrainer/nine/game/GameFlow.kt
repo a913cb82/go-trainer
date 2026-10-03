@@ -35,6 +35,14 @@ object GameFlow {
     fun resyncThinkingWanted(toMove: Int, playerColor: Int): Boolean =
         toMove != playerColor
 
+    /**
+     * Whether the player's just-applied move/pass must raise the thinking
+     * bar immediately, before any engine sync: exactly when botReply()
+     * follows. Placements and non-finishing passes always do; the second
+     * pass ends the game instead. botReply re-asserts and clears the flag.
+     */
+    fun replyFollowsHumanMove(gameFinished: Boolean): Boolean = !gameFinished
+
     /** One bot-reply winrate step: the appended list + the surviving flag. */
     data class WinrateStep(val winrates: List<Double>, val pendingFreePly: Boolean)
 

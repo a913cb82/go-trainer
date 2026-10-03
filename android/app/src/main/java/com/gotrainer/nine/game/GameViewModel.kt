@@ -363,6 +363,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 history = hist, toMove = -s.toMove, passing = p,
                 pendingFreePly = true,
                 winrateHistory = GameFlow.humanPassWinrates(s.winrateHistory),
+                isThinking = GameFlow.replyFollowsHumanMove(gameFinished = false),
             )
         )
         // Sync the pass into the persistent board, then the bot replies
@@ -455,6 +456,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 history = hist, toMove = -s.playerColor, passing = 0,
                 pendingFreePly = true,
                 winrateHistory = s.winrateHistory + win,
+                // Bar up now: the engine sync + cold start below can stall
+                // ~2s before botReply would raise it (see HumanMoveThinkingTest).
+                isThinking = GameFlow.replyFollowsHumanMove(gameFinished = false),
             ),
             fx = captureFxFor(s.boardSignMap, hist),
             place = PlaceFx(x, y, s.playerColor, hist.size),
