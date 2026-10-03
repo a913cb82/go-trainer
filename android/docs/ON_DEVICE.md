@@ -4,6 +4,15 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## Centered min-window merged + installed (2026-10-04, `stats-ydebug` -> main)
+
+Phantom-8k follow-up: the draw was innocent (logcat timeline proved
+freeze/tween/settle healthy; draw used fresh ticks). The covering grid
+padded narrow windows upward-only, centering the domain above the data.
+Expansion now runs toward weaker ranks first: the far-right sliver reads
+9k..11k. Two wasted installs of draw probes; kept the logcat protocol
+for next time.
+
 ## Covering y-grid merged + installed (2026-10-03, `stats-ygrid` -> main)
 
 Step-1 grid when narrow, map stretches to outer ticks. Installed over
