@@ -1,5 +1,11 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Y-freeze + instant toggle merged + installed (2026-10-03, `stats-yfix` -> main)
+
+Press loop takes consumed downs too; tap detection folded in (fires on
+finger-up, no double-tap wait). Installed over WiFi adb, launches clean
+(empty board, 14k).
+
 ## Y-freeze fix merged + installed (2026-10-03, `stats-yfreeze` -> main)
 
 The freezer was dead code (never called). Press-tracked freeze/release now.
