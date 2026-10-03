@@ -109,10 +109,14 @@ fun BoardView(
             if (scale <= 0f || alpha <= 0f) return
             val c = Offset(cx(x), cy(y) + dyCells * cell)
             drawCircle(Color.Black.copy(alpha = 0.25f * alpha), radius = cell * 0.46f * scale, center = Offset(c.x + 2f, c.y + 3f))
-            drawGoStone(
-                c, cell * 0.44f * scale, black = v == 1,
-                outline = if (v == 1) Color.White else Color.Black, alpha = alpha,
-            )
+            // Board stones stay rimless (black) / brown-rimmed (white) as
+            // always; outline rims are New Game chooser dressing only.
+            drawGoStone(c, cell * 0.44f * scale, black = v == 1, alpha = alpha)
+            if (v == 2)
+                drawCircle(
+                    Color(0xFF8A7040).copy(alpha = alpha),
+                    radius = cell * 0.44f * scale, center = c, style = Stroke(width = 2f),
+                )
         }
         // Stone animation: the logical board already moved on — this draws
         // nothing but pixels. The settling stone skips the static pass and
