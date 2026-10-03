@@ -14,16 +14,14 @@ class RatedGameTest {
     private fun hist(vararg colors: Int) = colors.map { MoveRec(0, 0, it) }
 
     @Test fun `append on first player ply of a rated game only`() {
-        assertTrue(GameFlow.ratedAppendWanted(true, 0, "playing", emptyList(), 1))
-        // Suggestions games never rate, even opted in…
-        assertFalse(GameFlow.ratedAppendWanted(true, 3, "playing", emptyList(), 1))
-        // …and opted-out free games leave no trace.
-        assertFalse(GameFlow.ratedAppendWanted(false, 0, "playing", emptyList(), 1))
-        assertFalse(GameFlow.ratedAppendWanted(true, 0, "finished", emptyList(), 1))
-        assertFalse(GameFlow.ratedAppendWanted(true, 0, "playing", hist(1), 1))
-        assertTrue(GameFlow.ratedAppendWanted(true, 0, "playing", hist(-1), 1))
+        assertTrue(GameFlow.ratedAppendWanted(true, "playing", emptyList(), 1))
+        // Opted-out games leave no trace.
+        assertFalse(GameFlow.ratedAppendWanted(false, "playing", emptyList(), 1))
+        assertFalse(GameFlow.ratedAppendWanted(true, "finished", emptyList(), 1))
+        assertFalse(GameFlow.ratedAppendWanted(true, "playing", hist(1), 1))
+        assertTrue(GameFlow.ratedAppendWanted(true, "playing", hist(-1), 1))
         // Bot plies don't count: still the player's first ply pending.
-        assertTrue(GameFlow.ratedAppendWanted(true, 0, "playing", hist(-1, -1), 1))
+        assertTrue(GameFlow.ratedAppendWanted(true, "playing", hist(-1, -1), 1))
     }
 
     @Test fun `finish upgrades clean wins and draws only`() {

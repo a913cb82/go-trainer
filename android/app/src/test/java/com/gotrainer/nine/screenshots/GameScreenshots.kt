@@ -5,10 +5,8 @@ import androidx.compose.runtime.Composable
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.android.ide.common.rendering.api.SessionParams
-import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
 import com.gotrainer.nine.game.Difficulty
-import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.PlayerWhr
 import com.gotrainer.nine.game.RatedGame
 import com.gotrainer.nine.game.WhrAnchors
@@ -23,14 +21,6 @@ import com.gotrainer.nine.ui.goTrainerTheme
 import kotlin.math.roundToInt
 import org.junit.Rule
 import org.junit.Test
-
-private val DemoCandidates = listOf(
-    Candidate(4, 4, "A", 0.31, 0.55, 2.5, 0.0, "good"),
-    Candidate(2, 2, "B", 0.22, 0.53, 2.1, 0.4, "good"),
-    Candidate(6, 6, "C", 0.18, 0.50, 1.4, 1.1, "ok"),
-    Candidate(2, 6, "D", 0.11, 0.44, -0.6, 3.1, "ok"),
-    Candidate(6, 2, "E", 0.07, 0.38, -2.7, 5.2, "overconcentrated"),
-)
 
 private fun boardWith(vararg stones: Triple<Int, Int, Int>): List<List<Int>> {
     val b = List(9) { MutableList(9) { 0 } }
@@ -56,31 +46,13 @@ private val MidHistory = listOf(
     MoveRec(4, 2, -1),
 )
 
-/** Feedback for the mid-game position: picked D4 (gap 0, green halo) + 3 live alternatives. */
-private val MidEvals = listOf(
-    EvaluatedMove(3, 5, "A", 0.31, 0.58, 3.2, 0.0, 0.0, "good"),
-    EvaluatedMove(2, 4, "B", 0.22, 0.55, 2.3, 0.9, 0.9, "good"),
-    EvaluatedMove(5, 4, "C", 0.18, 0.52, 1.2, 2.0, 2.0, "ok"),
-    EvaluatedMove(6, 3, "D", 0.11, 0.44, -0.9, 4.1, 4.1, "overconcentrated"),
-)
-
 private val WinDemo = listOf(0.5, 0.53, 0.51, 0.55, 0.52, 0.57, 0.55)
-
-/** Next-turn suggestions (n=5, good-vs-tempting) on points empty in MidBoard. */
-private val NextCandidates = listOf(
-    Candidate(2, 5, "A", 0.28, 0.56, 2.8, 0.0, "good"),
-    Candidate(5, 2, "B", 0.19, 0.52, 1.9, 0.9, "good"),
-    Candidate(3, 3, "C", 0.14, 0.50, 1.2, 1.6, "ok"),
-    Candidate(6, 4, "D", 0.09, 0.45, -0.3, 3.1, "ok"),
-    Candidate(1, 3, "E", 0.05, 0.39, -1.7, 4.5, "overconcentrated"),
-)
 
 private fun midGame() = GameState(
     boardSignMap = MidBoard,
     history = MidHistory,
     toMove = 1,
     rank = Rank.R10K,
-    evaluations = MidEvals,
     winrateHistory = WinDemo,
 )
 
@@ -102,14 +74,14 @@ class GameScreenshots {
 
     @Test
     fun s01_new_game() {
-        game("01_new_game", GameState(candidates = DemoCandidates))
+        game("01_new_game", GameState())
     }
 
     @Test
     fun s02_setup() {
         snap("02_setup") {
             Surface {
-                NewGameScreen(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftMultipleChoice = true, onDraftMultipleChoice = {}, draftBest = 2, onDraftBest = {}, draftWorst = 3, onDraftWorst = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftFeedback = true, onDraftFeedback = {}, draftRanked = false, onDraftRanked = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onBack = {}, onStart = {})
+                NewGameScreen(s = GameState(), draftRank = Rank.R10K, onDraftRank = {}, draftColor = ColorChoice.BLACK, onDraftColor = {}, draftRanked = false, onDraftRanked = {}, draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {}, draftTargetWinrate = 50, onDraftTargetWinrate = {}, onBack = {}, onStart = {})
             }
         }
     }
@@ -120,16 +92,6 @@ class GameScreenshots {
     }
 
     @Test
-    fun s04_feedback() {
-        game("04_feedback", midGame().copy(candidates = NextCandidates))
-    }
-
-    @Test
-    fun s05_mine_only() {
-        game("05_mine_only", midGame().copy(candidates = NextCandidates, feedbackScopeAll = false))
-    }
-
-    @Test
     fun s06_free_choice() {
         game(
             "06_free_choice",
@@ -137,7 +99,6 @@ class GameScreenshots {
                 boardSignMap = MidBoard,
                 history = MidHistory,
                 toMove = 1,
-                multipleChoice = false,
                 winrateHistory = WinDemo,
             ),
         )
@@ -152,15 +113,13 @@ class GameScreenshots {
                 history = MidHistory,
                 reviewIdx = 3,
                 winrateHistory = WinDemo,
-                pastCandidates = mapOf(3 to NextCandidates),
-                pastEvals = mapOf(2 to MidEvals),
             ),
         )
     }
 
     @Test
     fun s09_white() {
-        // Human plays White: bot (Black) opened E5, White to play with choices.
+        // Human plays White: bot (Black) opened E5, White to play.
         game(
             "09_white",
             GameState(
@@ -169,7 +128,6 @@ class GameScreenshots {
                 toMove = -1,
                 playerColor = -1,
                 colorChoice = ColorChoice.WHITE,
-                candidates = NextCandidates,
                 winrateHistory = listOf(0.45),
             ),
         )
@@ -222,16 +180,12 @@ class GameScreenshots {
             Surface {
                 NewGameScreen(
                     s = GameState(
-                        rank = Rank.R8K, multipleChoice = false,
+                        rank = Rank.R8K,
                         difficulty = Difficulty.AUTOMATCH, targetWinrate = 50,
                         playerRankText = "12k ±3", playerRating = 1358.0,
                     ),
                     draftRank = Rank.R8K, onDraftRank = {},
-                    draftMultipleChoice = false, onDraftMultipleChoice = {},
-                    draftBest = 2, onDraftBest = {},
-                    draftWorst = 3, onDraftWorst = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
-                    draftFeedback = true, onDraftFeedback = {},
                     draftRanked = true, onDraftRanked = {},
                     draftDifficulty = Difficulty.AUTOMATCH, onDraftDifficulty = {},
                     draftTargetWinrate = 50, onDraftTargetWinrate = {},
@@ -246,9 +200,8 @@ class GameScreenshots {
         game(
             "14_automatch_game",
             GameState(
-                rank = Rank.R8K, multipleChoice = false,
+                rank = Rank.R8K,
                 difficulty = Difficulty.AUTOMATCH,
-                candidates = DemoCandidates,
             ),
         )
     }
@@ -273,10 +226,7 @@ class GameScreenshots {
                         Triple(3, 3, 1), Triple(5, 3, 1), Triple(4, 2, 1),
                         Triple(3, 4, 1), Triple(5, 4, 1), Triple(4, 5, 1),
                     ),
-                    candidates = null,
-                    evaluations = null,
                     lastMove = 4 to 5,
-                    feedbackMove = null,
                     onVertexClick = { _, _ -> },
                     popStones = listOf(
                         com.gotrainer.nine.game.CapturedStone(4, 3, -1),
@@ -300,10 +250,7 @@ class GameScreenshots {
                     boardSignMap = boardWith(
                         Triple(3, 5, 1), Triple(5, 5, 1), Triple(4, 5, 1),
                     ),
-                    candidates = null,
-                    evaluations = null,
                     lastMove = 4 to 5,
-                    feedbackMove = null,
                     onVertexClick = { _, _ -> },
                     placeFx = com.gotrainer.nine.game.PlaceFx(4, 5, 1, 3),
                     animProgress = 0.3f,
@@ -380,7 +327,7 @@ class GameScreenshotsDark {
     @Test
     fun s10_dark_game() {
         snap("10_dark_game") {
-            GameScreenContent(s = GameState(candidates = DemoCandidates), actions = GameActions())
+            GameScreenContent(s = GameState(), actions = GameActions())
         }
     }
 
@@ -389,13 +336,9 @@ class GameScreenshotsDark {
         snap("11_dark_setup") {
             Surface {
                 NewGameScreen(
-                    s = GameState(rank = Rank.R3D, multipleChoice = false, showFeedback = false),
+                    s = GameState(rank = Rank.R3D),
                     draftRank = Rank.R3D, onDraftRank = {},
-                    draftMultipleChoice = false, onDraftMultipleChoice = {},
-                    draftBest = 2, onDraftBest = {},
-                    draftWorst = 3, onDraftWorst = {},
                     draftColor = ColorChoice.BLACK, onDraftColor = {},
-                    draftFeedback = false, onDraftFeedback = {},
                     draftRanked = false, onDraftRanked = {},
                     draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {},
                     draftTargetWinrate = 50, onDraftTargetWinrate = {},

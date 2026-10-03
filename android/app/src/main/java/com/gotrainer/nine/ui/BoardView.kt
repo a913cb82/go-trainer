@@ -10,28 +10,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.CapturedStone
 import com.gotrainer.nine.game.PlaceFx
-import com.gotrainer.nine.game.EvaluatedMove
-import com.gotrainer.nine.game.GapStyle
 import kotlin.math.roundToInt
 
 private val WOOD = Color(0xFFE8C07A)
 private val GRID = Color(0xFF3E2B15)
 private val STARS = listOf(2 to 2, 2 to 6, 6 to 2, 6 to 6, 4 to 4)
-
-/** Feedback colors by selection GROUP: good = green, bad = red, middle = yellow. */
-internal fun tagStyle(tag: String): GapStyle = when (tag) {
-    "good" -> GapStyle("#27864a", "#c8f0c8")
-    "overconcentrated" -> GapStyle("#c0392b", "#ffcccc")
-    else -> GapStyle("#b7791f", "#fff6b0")
-}
 
 /** Place phase (settle) and shrink phase (captures) lengths, ms. */
 internal const val PLACE_MS = 90
@@ -55,14 +44,11 @@ internal fun shrinkScale(k: Float): Float {
     return (1f - s).coerceIn(0f, 1f)
 }
 
-/** Pure Canvas 9x9 board: grid, hoshi, stones, candidates, feedback. Wood board in both themes. */
+/** Pure Canvas 9x9 board: grid, hoshi, stones, last-move ring. Wood board in both themes. */
 @Composable
 fun BoardView(
     boardSignMap: List<List<Int>>,
-    candidates: List<Candidate>?,
-    evaluations: List<EvaluatedMove>?,
     lastMove: Pair<Int, Int>?,
-    feedbackMove: Pair<Int, Int>?,
     onVertexClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     /** Captured stones mid-shrink (empty points now); purely visual overlay. */
@@ -79,7 +65,7 @@ fun BoardView(
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(8.dp))
-            .pointerInput(candidates, boardSignMap) {
+            .pointerInput(boardSignMap) {
                 detectTapGestures { offset ->
                     val w = size.width
                     val pad = w * 0.08f
@@ -158,19 +144,12 @@ fun BoardView(
             val sc = shrinkScale(((elapsed - PLACE_MS) / SHRINK_MS).coerceIn(0f, 1f))
             if (sc > 0f) for (st in popStones) stoneAt(st.x, st.y, st.color, scale = sc)
         }
-        // last-move ring — skipped ONLY when a feedback halo is actually drawn at
-        // that point (the halo is what would collide). In free-choice review the
-        // feedback list is empty, so the ring must still show on the player's
-        // own (black) stone: the old coordinate-only check hid it there.
-        val feedbackHasHalo = feedbackMove != null &&
-            boardSignMap[feedbackMove.second][feedbackMove.first] != 0 &&
-            evaluations?.any { it.x == feedbackMove.first && it.y == feedbackMove.second } == true
+        // last-move ring. The settling stone carries its own fading ring;
+        // the static one returns when the clock finishes.
         if (lastMove != null) {
             val (lx, ly) = lastMove
-            // The settling stone carries its own fading ring; the static one
-            // returns when the clock finishes.
             val ringCovered = placing && lx == placeFx!!.x && ly == placeFx.y
-            if (!ringCovered && boardSignMap[ly][lx] != 0 && !(feedbackHasHalo && lx == feedbackMove!!.first && ly == feedbackMove.second)) {
+            if (!ringCovered && boardSignMap[ly][lx] != 0) {
                 val v = boardSignMap[ly][lx]
                 drawCircle(
                     if (v == 1) Color.White else Color.Black,
@@ -179,62 +158,5 @@ fun BoardView(
                 )
             }
         }
-        // faint dashed candidates
-        if (candidates != null) {
-            for (c in candidates) {
-                drawCircle(
-                    Color(0xFFFFF7CC).copy(alpha = 0.32f), radius = cell * 0.42f,
-                    center = Offset(cx(c.x), cy(c.y)),
-                )
-                drawCircle(
-                    Color(0xFF7A5A1A).copy(alpha = 0.45f), radius = cell * 0.42f,
-                    center = Offset(cx(c.x), cy(c.y)),
-                    style = Stroke(width = 3f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))),
-                )
-            }
-        }
-        // feedback: picked halo + pts/win% pill, colored by the move's GROUP
-        // (good = green, bad = red, middle = yellow) — not by point cutoffs.
-        if (feedbackMove != null) {
-            val (lx, ly) = feedbackMove
-            if (boardSignMap[ly][lx] != 0) {
-                val ev = evaluations?.firstOrNull { it.x == lx && it.y == ly }
-                if (ev != null) {
-                    val style = tagStyle(ev.tag)
-                    drawCircle(style.color, radius = cell * 0.53f, center = Offset(cx(lx), cy(ly)), style = Stroke(width = 7f))
-                    pill(cx(lx), cy(ly), cell, ev.strongScore, ev.strongWinrate, style.hex, style.bg)
-                }
-            }
-        }
-        // alternative badges on empty points
-        if (evaluations != null) {
-            for (e in evaluations) {
-                if (boardSignMap[e.y][e.x] != 0) continue
-                if (feedbackMove != null && e.x == feedbackMove.first && e.y == feedbackMove.second) continue
-                val style = tagStyle(e.tag)
-                pill(cx(e.x), cy(e.y), cell, e.strongScore, e.strongWinrate, style.hex, style.bg)
-            }
-        }
-    }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.pill(
-    x: Float, y: Float, cell: Float, pts: Double, win: Double, hex: String, bg: String,
-) {
-    val fg = Color(android.graphics.Color.parseColor(hex))
-    val fill = Color(android.graphics.Color.parseColor(bg))
-    drawCircle(fill, radius = cell * 0.33f, center = Offset(x, y))
-    drawCircle(fg, radius = cell * 0.33f, center = Offset(x, y), style = Stroke(width = 4f))
-    drawContext.canvas.nativeCanvas.apply {
-        val paint = android.graphics.Paint().apply {
-            color = android.graphics.Color.parseColor(hex)
-            textSize = cell * 0.24f
-            textAlign = android.graphics.Paint.Align.CENTER
-            isFakeBoldText = true
-        }
-        val ptsStr = (if (pts >= 0) "+" else "") + String.format("%.1f", pts)
-        drawText(ptsStr, x, y + cell * 0.03f, paint)
-        val small = android.graphics.Paint(paint).apply { textSize = cell * 0.18f }
-        drawText("${(win * 100).roundToInt()}%", x, y + cell * 0.22f, small)
     }
 }

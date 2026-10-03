@@ -12,15 +12,11 @@ import kotlin.math.roundToInt
  */
 object GameFlow {
 
-    /** What the app does on first open, given the human's resolved colour. */
-    enum class OpeningAction { REQUEST_CANDIDATES, BOT_REPLY }
-
     /**
-     * What the app does on first open: candidates when the human (Black) is
-     * to move, otherwise the bot opens (it holds Black and the first move).
+     * Whether the bot opens the game: exactly when it holds Black (the
+     * human plays White). A human-Black game waits for a tap instead.
      */
-    fun openingAction(playerColor: Int): OpeningAction =
-        if (playerColor == -1) OpeningAction.BOT_REPLY else OpeningAction.REQUEST_CANDIDATES
+    fun botOpens(playerColor: Int): Boolean = playerColor == -1
 
     /**
      * Whether to warm the engine in the background while the human thinks:
@@ -33,22 +29,11 @@ object GameFlow {
 
     /**
      * Whether the resumed-game engine resync (process spawn + model load +
-     * board replay) must raise the thinking indicator: exactly when a
-     * follow-up engine query will be issued (bot reply, or candidates the
-     * human never saw). Mirrors the follow-up branch in GameViewModel init.
-     * Otherwise the app sits on a dead board for seconds with no indicator.
+     * board replay) must raise the thinking indicator: exactly when the
+     * follow-up botReply() will be issued. A human turn never queries.
      */
-    fun resyncThinkingWanted(
-        toMove: Int,
-        playerColor: Int,
-        choiceCount: Int,
-        candidatesPresent: Boolean,
-        reviewing: Boolean,
-    ): Boolean {
-        if (toMove != playerColor) return true // botReply() follows unconditionally
-        // Human to move: requestCandidates() follows only when it won't early-return.
-        return !reviewing && choiceCount != 0 && !candidatesPresent
-    }
+    fun resyncThinkingWanted(toMove: Int, playerColor: Int): Boolean =
+        toMove != playerColor
 
     /** One bot-reply winrate step: the appended list + the surviving flag. */
     data class WinrateStep(val winrates: List<Double>, val pendingFreePly: Boolean)
@@ -91,20 +76,17 @@ object GameFlow {
     // ---- rated games (free-choice only; suggestions games leave no trace) ----
 
     /**
-     * Whether this player ply writes the ahead-loss record: a ranked,
-     * actually-free-choice game in progress and the player's first ply
-     * (stone or pass). Suggestions games (choiceCount > 0) never rate, even
-     * opted in; opted-out free games leave no trace either.
+     * Whether this player ply writes the ahead-loss record: a ranked game
+     * in progress and the player's first ply (stone or pass). Opted-out
+     * games leave no trace.
      */
     fun ratedAppendWanted(
         ranked: Boolean,
-        choiceCount: Int,
         status: String,
         history: List<MoveRec>,
         playerColor: Int,
     ): Boolean =
-        ranked && choiceCount == 0 && status == "playing" &&
-            history.none { it.color == playerColor }
+        ranked && status == "playing" && history.none { it.color == playerColor }
 
     /**
      * Upgrade for the pending loss record on a finished game: 1.0 win, 0.5

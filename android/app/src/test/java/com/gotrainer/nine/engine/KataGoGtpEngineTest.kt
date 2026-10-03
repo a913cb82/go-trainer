@@ -88,9 +88,8 @@ class KataGoGtpEngineTest {
     }
 
     /**
-     * KataGo pads thin reports with symmetry duplicates (`isSymmetryOf`), which
-     * are NOT distinct candidates: a user seeing 3 real moves got 3 pills, and
-     * the filler must not be mistaken for real alternatives.
+     * KataGo pads thin reports with symmetry duplicates (`isSymmetryOf`):
+     * flagged on the parse, never mistaken for real moves.
      */
     @Test fun `symmetry-padded filler is flagged not dropped`() {
         val line = "info move F5 visits 806 winrate 0.37 scoreLead -0.78 prior 0.19 order 0 pv F5 " +
@@ -100,33 +99,6 @@ class KataGoGtpEngineTest {
         assertEquals(2, rep.moves.size)
         assertEquals(true, rep.moves[0].padded)
         assertEquals(false, rep.moves[1].padded)
-    }
-
-    /**
-     * Candidate breadth fix: analysis runs with HumanSL OFF + wide root noise
-     * (HumanSL's focused params left only ~4 visited root moves, starving the
-     * 5-choice pool). Mirrors BadukAI, which disables HumanSL for its panel.
-     */
-    @Test fun `analysis params disable humanSL and widen the root`() {
-        val p = KataGoGtpEngine.humanSlParamsOff()
-        assertEquals("0.20", p["analysisWideRootNoise"])
-        assertEquals("150", p["maxVisits"])
-        assertEquals("true", p["useNoisePruning"])
-        assertEquals("0.3", p["dynamicScoreUtilityFactor"])
-        // The humanSL-specific knobs must NOT be present when off.
-        assertEquals(false, p.keys.any { it.startsWith("humanSL") })
-    }
-
-    @Test fun `raw human policy grid maps points`() {
-        val rows = (0 until 9).joinToString("\n") { r ->
-            (0 until 9).joinToString(" ") { c -> if (r == 4 && c == 4) "0.190000" else "0.001000" }
-        }
-        val resp = "= symmetry 0\nwhiteWin 0.5\nwhiteLoss 0.5\nnoResult 0.0\n" +
-            "whiteScore 0.0\nwhiteScoreSq 0.0\nshorttermWinlossError 0.1\n" +
-            "shorttermScoreError 1.0\npolicy\n$rows\npolicyPass 0.0005\n"
-        val grid = KataGoGtpEngine.parseRawHumanPolicy(resp)
-        assertEquals(0.19, grid[4 to 4]!!, 1e-6)
-        assertEquals(81, grid.size)
     }
 
     @Test fun `gtp config asset is the gtp one`() {

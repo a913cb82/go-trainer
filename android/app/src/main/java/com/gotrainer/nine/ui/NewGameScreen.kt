@@ -19,7 +19,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -44,16 +43,8 @@ fun NewGameScreen(
     s: GameState,
     draftRank: Rank,
     onDraftRank: (Rank) -> Unit,
-    draftMultipleChoice: Boolean,
-    onDraftMultipleChoice: (Boolean) -> Unit,
-    draftBest: Int,
-    onDraftBest: (Int) -> Unit,
-    draftWorst: Int,
-    onDraftWorst: (Int) -> Unit,
     draftColor: ColorChoice,
     onDraftColor: (ColorChoice) -> Unit,
-    draftFeedback: Boolean,
-    onDraftFeedback: (Boolean) -> Unit,
     draftRanked: Boolean,
     onDraftRanked: (Boolean) -> Unit,
     draftDifficulty: Difficulty,
@@ -63,7 +54,6 @@ fun NewGameScreen(
     onBack: () -> Unit,
     onStart: () -> Unit,
 ) {
-    val showChoiceOptions = draftMultipleChoice && (draftBest + draftWorst) > 0
     Scaffold(
         topBar = {
             TopAppBar(
@@ -102,7 +92,7 @@ fun NewGameScreen(
                 Text(s.playerRankText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
 
-            Text("Difficulty", style = MaterialTheme.typography.labelLarge)
+            Text("Opponent", style = MaterialTheme.typography.labelLarge)
             SingleChoiceSegmentedButtonRow {
                 Difficulty.entries.forEachIndexed { i, d ->
                     SegmentedButton(
@@ -151,81 +141,16 @@ fun NewGameScreen(
                     steps = 7,
                 )
             }
-            // Ranked needs real free play (no candidate moves); suggestions
-            // games are always unrated, so the toggle locks to Unranked there.
-            // The opt-in survives: flip back to free play and Ranked returns.
-            val canRank = !draftMultipleChoice || draftBest + draftWorst == 0
+            Text("Rating", style = MaterialTheme.typography.labelLarge)
             SingleChoiceSegmentedButtonRow {
                 listOf(true to "Ranked", false to "Unranked").forEachIndexed { i, (v, label) ->
                     SegmentedButton(
-                        selected = (if (canRank) draftRanked else false) == v,
+                        selected = draftRanked == v,
                         onClick = { onDraftRanked(v) },
-                        enabled = canRank,
                         shape = SegmentedButtonDefaults.itemShape(i, 2),
                         label = { Text(label) },
                     )
                 }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Multiple choice mode", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (draftMultipleChoice) "${draftBest + draftWorst} choices per move"
-                        else "Play anywhere, no candidate moves",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = draftMultipleChoice, onCheckedChange = onDraftMultipleChoice)
-            }
-
-            if (draftMultipleChoice) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Best moves to show", style = MaterialTheme.typography.bodyMedium)
-                    Text("$draftBest", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                }
-                Slider(
-                    value = draftBest.toFloat(),
-                    onValueChange = { onDraftBest(it.roundToInt().coerceIn(0, 5)) },
-                    valueRange = 0f..5f,
-                    steps = 4,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Worst moves to show", style = MaterialTheme.typography.bodyMedium)
-                    Text("$draftWorst", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                }
-                Slider(
-                    value = draftWorst.toFloat(),
-                    onValueChange = { onDraftWorst(it.roundToInt().coerceIn(0, 5)) },
-                    valueRange = 0f..5f,
-                    steps = 4,
-                )
-            }
-
-            // Instant feedback only exists when the game offers candidate moves.
-            if (showChoiceOptions) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Instant feedback", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Show points lost after each pick",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = draftFeedback, onCheckedChange = onDraftFeedback)
             }
 
             Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {

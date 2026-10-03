@@ -1,36 +1,9 @@
 package com.gotrainer.nine.game
 
-/** One candidate choice offered to the player (mirrors server /candidates move). */
-data class Candidate(
-    val x: Int,
-    val y: Int,
-    val label: String,
-    val humanPolicy: Double,
-    val strongWinrate: Double,
-    val strongScore: Double,
-    val scoreGap: Double,
-    val tag: String, // good | ok | overconcentrated
-)
-
-/** Candidate with evaluated gap vs best (mirrors gameStore evaluations). */
-data class EvaluatedMove(
-    val x: Int,
-    val y: Int,
-    val label: String,
-    val humanPolicy: Double,
-    val strongWinrate: Double,
-    val strongScore: Double,
-    val scoreGap: Double,
-    val gap: Double,
-    val tag: String,
-)
-
 data class MoveRec(
     val x: Int,
     val y: Int, // -1,-1 = pass
     val color: Int, // 1 black, -1 white
-    val candidate: Candidate? = null,
-    val gap: Double? = null,
 )
 
 /** One stone removed by the last play, for the pop overlay. */
@@ -56,15 +29,6 @@ data class GameState(
     val history: List<MoveRec> = emptyList(),
     val toMove: Int = 1,
     val rank: Rank = Rank.R10K,
-    /** Multiple-choice mode: when false the player plays anywhere (free choice). */
-    val multipleChoice: Boolean = true,
-    /** Best-group slots (0-5) and worst-group slots (0-5) from the sheet sliders. */
-    val bestCount: Int = 2,
-    val worstCount: Int = 3,
-    val candidates: List<Candidate>? = null,
-    val evaluations: List<EvaluatedMove>? = null,
-    val showFeedback: Boolean = true,
-    val feedbackScopeAll: Boolean = true, // false = picked-only
     val winrateHistory: List<Double> = emptyList(),
     val status: String = "playing", // playing | finished
     val passing: Int = 0,
@@ -73,10 +37,6 @@ data class GameState(
     val error: String? = null,
     /** Winrate card expanded; persisted across app opens. */
     val graphOpen: Boolean = true,
-    /** Candidates offered at each position (keyed by moves played before Black's pick). */
-    val pastCandidates: Map<Int, List<Candidate>> = emptyMap(),
-    /** Feedback recorded for each Black pick (same keying), so review shows real history. */
-    val pastEvals: Map<Int, List<EvaluatedMove>> = emptyMap(),
     /** Who the human plays (resolved per game into playerColor). */
     val colorChoice: ColorChoice = ColorChoice.BLACK,
     /** On-device KataGo vs the home server (adb reverse / LAN). */
@@ -108,12 +68,6 @@ data class GameState(
     val captureFx: CaptureFx? = null,
     /** Settle overlay for the last play's stone; transient, never persisted. */
     val placeFx: PlaceFx? = null,
-    /**
-     * The player opted into rating. Effective only when the game is actually
-     * free play ([choiceCount] == 0); suggestions games are always unrated.
-     */
+    /** The player opted into rating; every game is free play, so it counts. */
     val ranked: Boolean = true,
-) {
-    /** Moves offered per turn: best + worst while multiple-choice is on, else 0. */
-    val choiceCount: Int get() = if (!multipleChoice) 0 else bestCount + worstCount
-}
+)

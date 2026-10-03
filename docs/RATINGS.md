@@ -42,8 +42,8 @@ writes only the latest point and Stats backfills stale entries lazily.
 
 ## Rated play and automatch
 
-Only free-choice games record. Free choice means no suggestions. The app
-writes a pending loss on the first ply, so abandoned games stay losses. A
+Every game records. The app writes a pending loss on the first ply, so
+abandoned games stay losses. A
 ply is one move by one player. Clean finishes upgrade the record to win or
 draw. History stores rank IDs, not ratings, and the rating recomputes on
 read — old games follow anchor changes with no migration. Automatch inverts
@@ -58,5 +58,5 @@ and a color-advantage check — in that order
 ## See also
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — where rating lives in the app
-- [LEARNING_DESIGN.md](LEARNING_DESIGN.md) — rated vs suggestions play
+- [LEARNING_DESIGN.md](LEARNING_DESIGN.md) — retired multiple-choice mode
 - [NEXT_STEPS.md](NEXT_STEPS.md) — the refit schedule

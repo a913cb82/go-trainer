@@ -16,21 +16,18 @@ required, and the app says so when files are missing.
   net ships inside the app. The human steering net downloads once on the
   setup screen, with resume and retry. File names and sizes live in
   `ModelManager`.
-- **Queries:** bot moves use `kata-genmove_analyze`. Candidates use
-  `kata-analyze` with the human mode left on — candidates need the true
-  human policy (how often a human at your rank plays each move). Winrates
-  report BLACK-perspective (`reportAnalysisWinratesAs = BLACK` in
-  `gtp.cfg`. The ViewModel flips for White humans.) Scoring uses
-  `final_score` under Chinese rules with komi 7.5. Komi means White
-  moves second and receives 7.5 extra points.
+- **Queries:** bot moves use `kata-genmove_analyze` (its analyze lines
+  also feed the winrate graph). Winrates report BLACK-perspective
+  (`reportAnalysisWinratesAs = BLACK` in `gtp.cfg`. The ViewModel flips
+  for White humans.) Scoring uses `final_score` under Chinese rules with
+  komi 7.5. Komi means White moves second and receives 7.5 extra points.
 - **Profiles:** one `rank_<id>` profile per game rank. KataGo profiles
   cover only part of our ladder, so weaker ranks clamp to the lowest
   profile (the clamp lives in `profileFor`). `preaz_` (pre-AI-era openings)
   is a possible follow-up selector, not the default.
-- **Budgets:** replies use a small visit budget, candidate queries a much
-  larger one (both live in `KataGoGtpEngine`). A visit is one simulated
-  continuation. Replies land under a second on warm hardware. First load
-  takes a few seconds.
+- **Budgets:** replies use a small visit budget (live in `KataGoGtpEngine`).
+  A visit is one simulated continuation. Replies land under a second on
+  warm hardware. First load takes a few seconds.
 
 Binary provenance, staging layout, and the install loop live in the
 phone-session notes, not here

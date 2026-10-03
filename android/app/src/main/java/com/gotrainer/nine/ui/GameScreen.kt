@@ -20,7 +20,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -46,25 +45,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.gotrainer.nine.game.Candidate
-import com.gotrainer.nine.game.ColorChoice
-import com.gotrainer.nine.game.Difficulty
-import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.GameViewModel
 import com.gotrainer.nine.game.GoBoard
-import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.game.RatingCurve
 import com.gotrainer.nine.game.Scoring
 import com.gotrainer.nine.game.Whr
-
-/** Header subtitle: rank alone in free play, rank + total choices otherwise. */
-internal fun headerSubtitle(s: GameState): String {
-    val total = s.choiceCount
-    val base = if (!s.multipleChoice || total == 0) s.rank.id
-    else if (total == 1) "${s.rank.id} · 1 choice" else "${s.rank.id} · $total choices"
-    return base
-}
 
 /** Callbacks so the pure content below is screenshot-friendly (no ViewModel). */
 data class GameActions(
@@ -72,12 +58,8 @@ data class GameActions(
     val onNewGame: () -> Unit = {},
     val onUndo: () -> Unit = {},
     val onPass: () -> Unit = {},
-    val onShowFeedback: (Boolean) -> Unit = {},
-    val onScopeAll: (Boolean) -> Unit = {},
     val onGraphOpen: (Boolean) -> Unit = {},
     val onReview: (Int?) -> Unit = {},
-    val onApplySetup: (Rank, Boolean, Int, Int, ColorChoice, Boolean, Difficulty, Int, Boolean) -> Unit =
-        { _, _, _, _, _, _, _, _, _ -> },
     val onShowStats: () -> Unit = {},
     val onOpenSetup: () -> Unit = {},
 )
@@ -93,21 +75,13 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     val curve by vm.ratedCurveFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     // Staged setup: the page edits drafts; nothing applies until Start game.
     var draftRank by remember { mutableStateOf(s.rank) }
-    var draftMultipleChoice by remember { mutableStateOf(s.multipleChoice) }
-    var draftBest by remember { mutableStateOf(s.bestCount) }
-    var draftWorst by remember { mutableStateOf(s.worstCount) }
     var draftColor by remember { mutableStateOf(s.colorChoice) }
-    var draftFeedback by remember { mutableStateOf(s.showFeedback) }
     var draftRanked by remember { mutableStateOf(s.ranked) }
     var draftDifficulty by remember { mutableStateOf(s.difficulty) }
     var draftTargetWinrate by remember { mutableStateOf(s.targetWinrate) }
     fun openSetup() {
         draftRank = s.rank
-        draftMultipleChoice = s.multipleChoice
-        draftBest = s.bestCount
-        draftWorst = s.worstCount
         draftColor = s.colorChoice
-        draftFeedback = s.showFeedback
         draftRanked = s.ranked
         draftDifficulty = s.difficulty
         draftTargetWinrate = s.targetWinrate
@@ -139,16 +113,8 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
             s = s,
             draftRank = draftRank,
             onDraftRank = { draftRank = it },
-            draftMultipleChoice = draftMultipleChoice,
-            onDraftMultipleChoice = { draftMultipleChoice = it },
-            draftBest = draftBest,
-            onDraftBest = { draftBest = it },
-            draftWorst = draftWorst,
-            onDraftWorst = { draftWorst = it },
             draftColor = draftColor,
             onDraftColor = { draftColor = it },
-            draftFeedback = draftFeedback,
-            onDraftFeedback = { draftFeedback = it },
             draftRanked = draftRanked,
             onDraftRanked = { draftRanked = it },
             draftDifficulty = draftDifficulty,
@@ -157,11 +123,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
             onDraftTargetWinrate = { draftTargetWinrate = it },
             onBack = { showSetup = false },
             onStart = {
-                vm.applySetup(
-                    draftRank, draftMultipleChoice, draftBest, draftWorst,
-                    draftColor, draftFeedback, draftDifficulty, draftTargetWinrate,
-                    draftRanked,
-                )
+                vm.applySetup(draftRank, draftColor, draftDifficulty, draftTargetWinrate, draftRanked)
                 showSetup = false
             },
         )
@@ -174,11 +136,8 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
             onNewGame = vm::newGame,
             onUndo = vm::undo,
             onPass = vm::pass,
-            onShowFeedback = vm::setShowFeedback,
-            onScopeAll = vm::setFeedbackScopeAll,
             onGraphOpen = vm::setGraphOpen,
             onReview = vm::setReviewIdx,
-            onApplySetup = vm::applySetup,
             onShowStats = { showStats = true },
             onOpenSetup = { openSetup() },
         ),
@@ -195,15 +154,7 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     val shownHistory = if (rIdx != null) s.history.take(rIdx) else s.history
     val last = shownHistory.lastOrNull()
     val lastMove = last?.takeIf { it.x >= 0 }?.let { it.x to it.y }
-    val feedbackMove = shownHistory.lastOrNull { it.color == s.playerColor && it.x >= 0 }?.let { it.x to it.y }
 
-    // Live overlays: next-turn candidates and persistent feedback share the board.
-    // Review overlays come from per-ply history recorded during play.
-    val boardCands: List<Candidate>? = if (rIdx != null) {
-        s.pastCandidates[rIdx]
-    } else {
-        if (s.choiceCount == 0) null else s.candidates
-    }
     // Stone animation: 90 ms settle on every placement, plus a 150 ms
     // shrink when the play captured (one 240 ms clock, same as demo
     // e_shrink; plain placements match f_place). Game state moves on
@@ -219,27 +170,6 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
     val fxClock = remember(place?.seq) { Animatable(0f) }
     LaunchedEffect(place?.seq) {
         if (place != null) fxClock.animateTo(1f, animationSpec = tween(animTotalMs, easing = LinearEasing))
-    }
-    val boardEvals: List<EvaluatedMove>? = if (rIdx != null) {
-        if (!s.showFeedback) {
-            null
-        } else {
-            val evals = s.pastEvals.filterKeys { it < rIdx }.maxByOrNull { it.key }?.value
-            if (!s.feedbackScopeAll && feedbackMove != null) {
-                evals?.filter { it.x == feedbackMove.first && it.y == feedbackMove.second }
-            } else {
-                evals
-            }
-        }
-    } else if (!s.showFeedback) {
-        null
-    } else {
-        val evals = s.evaluations
-        if (!s.feedbackScopeAll && feedbackMove != null) {
-            evals?.filter { it.x == feedbackMove.first && it.y == feedbackMove.second }
-        } else {
-            evals
-        }
     }
     val reviewBoard: List<List<Int>> =
         if (reviewing) {
@@ -275,7 +205,7 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                         Column {
                             Text("Go 9×9", style = MaterialTheme.typography.titleLarge)
                             Text(
-                                headerSubtitle(s),
+                                s.rank.id,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -317,10 +247,7 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
             // Full-bleed board: no card, no padding — same width as the winrate card.
             BoardView(
                 boardSignMap = reviewBoard,
-                candidates = boardCands,
-                evaluations = boardEvals,
                 lastMove = lastMove,
-                feedbackMove = feedbackMove,
                 onVertexClick = actions.onBoardTap,
                 modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
                 popStones = caps?.stones ?: emptyList(),
@@ -328,23 +255,6 @@ fun GameScreenContent(s: GameState, actions: GameActions, snack: SnackbarHostSta
                 animProgress = fxClock.value,
                 animTotalMs = animTotalMs,
             )
-
-            // Feedback scope — only while playing with feedback to scope.
-            if (s.status == "playing" && s.evaluations != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(
-                        selected = s.showFeedback,
-                        onClick = { actions.onShowFeedback(!s.showFeedback) },
-                        label = { Text("Feedback") },
-                    )
-                    FilterChip(
-                        selected = !s.feedbackScopeAll,
-                        enabled = s.showFeedback,
-                        onClick = { actions.onScopeAll(!s.feedbackScopeAll) },
-                        label = { Text("Only my move") },
-                    )
-                }
-            }
 
             ElevatedCard(modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {

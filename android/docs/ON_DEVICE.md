@@ -1,5 +1,13 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Free-play-only cut (2026-10-03, `free-play-only` branch)
+
+Multiple-choice mode removed from the shipped app: no candidate queries
+(`kata-analyze`, raw human policy, analysis-mode params all deleted from
+`KataGoGtpEngine`), no per-move evaluations, no feedback UI, save format
+v1 -> v2 (old saves start fresh; rated history survives on its own key).
+The candidate-breadth notes below are history, not live behavior.
+
 Device: Xiaomi 15 Ultra, HyperOS 3 / Android 16 (API 36), arm64-v8a. App id
 `com.gotrainer.nine`. No Studio, no emulator (no KVM). Tooling is the SDK at
 `~/Android/Sdk` plus `adb`. Install runs in the background. Verification

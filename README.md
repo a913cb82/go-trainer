@@ -10,9 +10,8 @@ that plays Go.
 
 ## What it does
 
-Each turn shows candidate moves. A candidate is one move you may play. You
-select one move. The app reveals points feedback. The opponent then replies
-with a human-like move.
+Each turn you play any move anywhere on the board. The opponent then
+replies with a human-like move at the selected rank.
 
 You play Black or White. You select rank from 20k to 9d. Ranks measure Go
 skill. Kyu ranks are student grades: 20k is the weakest, 1k is the
@@ -25,21 +24,14 @@ past positions. Two passes end the game. A pass means skipping your turn.
 The engine then scores the board. The full game state persists on every
 move, so quitting (or rebooting) resumes exactly where you left off.
 
-Free-choice games count toward your rank unless you flip the Ranked toggle to Unranked.
-Free choice means you play any move with no suggestions. Rated means the
-game counts toward your rank. The rank uses WHR from 20k. WHR (Whole-History
-Rating) is a rating system that tracks how skill changes over time. See
-`docs/RATINGS.md`. Suggestions games are always unrated. Your rank and
-uncertainty show in the setup sheet. Uncertainty measures doubt in the
-rank. The chart icon opens the stats screen with your rating history.
+Games count toward your rank unless you flip the Ranked toggle to Unranked.
+Rated means the game counts toward your rank. The rank uses WHR from 20k. WHR
+(Whole-History Rating) is a rating system that tracks how skill changes over
+time. See `docs/RATINGS.md`. Your rank and uncertainty show in the setup
+sheet. Uncertainty measures doubt in the rank. The chart icon opens the
+stats screen with your rating history.
 Automatch picks the bot rung nearest your target winrate. A rung is one
 step on the rank ladder.
-
-## Training styles
-
-The setup sheet selects style and move count. Two sliders pick how many best
-and worst moves to show, or free choice with no suggestions. Style sets the
-mix of good moves and tempting errors. Feedback color marks each group.
 
 ## Build and test
 
@@ -70,8 +62,7 @@ ships inside the app. The app downloads the human net once (see
 
 Play uses a persistent board. The engine keeps one board for the whole game
 instead of rebuilding it per query. Replies use a small visit budget. A
-visit is one simulated continuation of the game. Candidate queries use a
-much larger budget (both live in `KataGoGtpEngine`). Typical replies take
+visit is one simulated continuation of the game. Typical replies take
 under one second on warm hardware. First load takes a few seconds.
 
 Rules are Chinese area scoring with komi 7.5. Komi means White moves second
@@ -96,7 +87,7 @@ for Go game records.
 | `docs/RATINGS.md` | current | WHR rating design |
 | `docs/TECH_STACK.md` | current | Shipped stack vs dev-web stack |
 | `docs/KATAGO_INTEGRATION.md` | current | On-device engine and models |
-| `docs/LEARNING_DESIGN.md` | current | Candidate mix and feedback |
+| `docs/LEARNING_DESIGN.md` | retired | Multiple-choice mode (removed) |
 | `docs/NEXT_STEPS.md` | rolling | What comes next |
 | `docs/PLAN.md` | historical | Original build checklist, frozen |
 | `android/docs/ON_DEVICE.md` | living | Phone-session notes, updated per session |

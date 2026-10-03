@@ -1,6 +1,5 @@
 package com.gotrainer.nine.engine
 
-import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.MoveRec
 import com.gotrainer.nine.game.Rank
 
@@ -19,8 +18,6 @@ data class EngineMove(
     val rootWinrate: Double = 0.5,
     val rootScoreLead: Double = 0.0,
 )
-data class Evaluation(val winrate: Double, val scoreLead: Double)
-
 /**
  * Final-score answer. scoreLeadBlack follows KataGo's BLACK-perspective
  * convention (forced per-query via reportAnalysisWinratesAs): positive means
@@ -29,31 +26,14 @@ data class Evaluation(val winrate: Double, val scoreLead: Double)
  */
 data class ScoreResult(val scoreLeadBlack: Double, val ownership: List<List<Double>>? = null)
 
-/** Engine abstraction: candidates for the player + bot replies. */
+/** Engine abstraction: bot replies, scoring, persistent-board sync. */
 interface GoEngine {
-    suspend fun candidates(
-        board: List<List<Int>>,
-        toMove: Int,
-        rank: Rank,
-        best: Int,
-        worst: Int,
-        history: List<MoveRec>,
-    ): List<Candidate>
-
     suspend fun genMove(
         board: List<List<Int>>,
         toMove: Int,
         rank: Rank,
         history: List<MoveRec>,
     ): EngineMove
-
-    suspend fun evaluate(
-        board: List<List<Int>>,
-        move: Pair<Int, Int>,
-        toMove: Int,
-        rank: Rank,
-        history: List<MoveRec>,
-    ): Evaluation
 
     /** Score a finished game: engine estimate when available, local fallback otherwise. */
     suspend fun score(

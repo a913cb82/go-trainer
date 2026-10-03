@@ -2,11 +2,8 @@ package com.gotrainer.nine.engine
 
 import android.content.Context
 import android.util.Log
-import com.gotrainer.nine.game.Candidate
-import com.gotrainer.nine.game.CandidateSelector
 import com.gotrainer.nine.game.GoBoard
 import com.gotrainer.nine.game.MoveRec
-import com.gotrainer.nine.game.PoolEntry
 import com.gotrainer.nine.game.Rank
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,10 +25,8 @@ import java.util.concurrent.TimeUnit
  * BadukAI-consistent play (decompiled aki65 v1.23.0, /tmp/aki65/lzwrapper.py):
  * persistent GTP board (tree reuse across moves), HumanSL bundle via
  * kata-set-params + kata-set-param humanSLProfile, bot moves via
- * `time_settings 0 <think>s 1` + kata-genmove_analyze, candidates via
- * kata-analyze (HumanSL stays ACTIVE — we need humanPrior on moveInfos;
- * BadukAI deactivates it for its unbiased panel, which we don't have),
- * scoring via final_score.
+ * `time_settings 0 <think>s 1` + kata-genmove_analyze (its analyze lines
+ * also feed the winrate graph), scoring via final_score.
  *
  * Spawn/launch contract (load-bearing, verified by probe): cwd=/data/data
  * (package-gate requirement — the NOP'd length check reduces to a "/data/data"
@@ -52,17 +47,9 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         // BadukAI default think_time is 10s; the visit cap binds long before it.
         private const val THINK_TIME_SEC = 10L
         private const val GENMOVE_TIMEOUT_MS = 30_000L
-        private const val ANALYZE_TIMEOUT_MS = 20_000L
         private const val SCORE_TIMEOUT_MS = 15_000L
         /** BadukAI HumanSL play budget: 10 visits/move; analysis needs much more. */
         private const val PLAY_VISITS = 10
-        // 150 visits with wide-root-noise reliably yields 10-19 DISTINCT root moves
-        // (measured); at 25-60 visits the search funnels ~99% of visits into 1-4
-        // moves, which starved the candidate pool down to 3 pills (user report).
-        private const val ANALYZE_VISITS = 150
-        // KataGo's documented knob for analysis breadth: explore the top moves less
-        // deeply but give evaluations to a greater variety of moves.
-        private const val WIDE_ROOT_NOISE = "0.20"
         /**
          * Bundled b10 SEARCH net. Asset name MUST NOT end in ".gz": aapt2
          * silently decompresses .gz assets and STRIPS the extension during
@@ -98,34 +85,9 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         private const val GATE_CWD = "/data/data"
 
         /**
-         * BadukAI's HUMAN_SL_PARAMS, DEACTIVATED column (lzwrapper.py) plus wide
-         * root noise: used for ANALYSIS only. BadukAI turns HumanSL off before its
-         * analysis panel; we do the same for candidates, because HumanSL's focused
-         * search params collapse the root to a handful of visited moves, and the
-         * candidate selector needs a broad, scored move pool.
-         */
-        fun humanSlParamsOff(): Map<String, String> = mapOf(
-            "analysisIgnorePreRootHistory" to "true",
-            "rootNumSymmetriesToSample" to "1",
-            "useLcbForSelection" to "true",
-            "staticScoreUtilityFactor" to "0.1",
-            "dynamicScoreUtilityFactor" to "0.3",
-            "useUncertainty" to "true",
-            "subtreeValueBiasFactor" to "0.45",
-            "useNoisePruning" to "true",
-            "chosenMoveTemperatureEarly" to "0.5",
-            "chosenMoveTemperature" to "0.1",
-            "chosenMoveTemperatureHalflife" to "19",
-            "chosenMoveTemperatureOnlyBelowProb" to "1.0",
-            "chosenMovePrune" to "1",
-            "analysisWideRootNoise" to WIDE_ROOT_NOISE,
-            "maxVisits" to ANALYZE_VISITS.toString(),
-        )
-
-        /**
          * BadukAI's HUMAN_SL_PARAMS, activated column (lzwrapper.py). Sent via
          * kata-set-params when HumanSL play is (re)armed. maxVisits here is the
-         * PLAY budget; analysis uses humanSlParamsOff() at a wider budget.
+         * PLAY budget.
          */
         fun humanSlParams(): Map<String, String> = mapOf(
             "analysisIgnorePreRootHistory" to "false",
@@ -212,8 +174,7 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
          * same way). One report = one line:
          *   info move E5 visits 10 ... winrate 0.46 ... scoreLead -2.1 ... prior 0.19 ... order 0 pv ...
          *   info move C3 ... ... rootInfo visits 25 winrate 0.46 ... scoreLead -2.1 ...
-         * There is NO humanPrior field — only the main-net `prior`. The human
-         * signal comes from kata-raw-human-nn (see parseRawHumanPolicy).
+         * There is NO humanPrior field — only the main-net `prior`.
          */
         data class MoveStat(
             val move: String,
@@ -269,31 +230,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             return AnalyzeReport(moves, root)
         }
 
-        /**
-         * Human-net raw policy grid from `kata-raw-human-nn <C> 0` (multi-line
-         * `=` response). Profile-aware: KataGo evaluates with the currently set
-         * humanSLProfile — this is the TRUE humanPrior the JSON engine used to
-         * hand us. Returns (point -> prob); pass prob is dropped (candidates
-         * never offer pass, same as before).
-         */
-        fun parseRawHumanPolicy(response: String, boardSize: Int = 9): Map<Pair<Int, Int>, Double> {
-            val lines = response.lines()
-            val pi = lines.indexOfFirst { it.trim() == "policy" }
-            if (pi < 0) {
-                val head = response.replace("\n", " | ").take(300)
-                throw IllegalStateException("kata-raw-human-nn: no policy grid in response ($head)")
-            }
-            val out = HashMap<Pair<Int, Int>, Double>()
-            for (r in 0 until boardSize) {
-                val row = lines.getOrNull(pi + 1 + r)?.trim()?.split(Regex("\\s+")) ?: break
-                for (c in 0 until minOf(boardSize, row.size)) {
-                    val p = row[c].toDoubleOrNull() ?: continue
-                    if (p > 0) out[c to r] = p
-                }
-            }
-            if (out.isEmpty()) throw IllegalStateException("kata-raw-human-nn: empty policy grid")
-            return out
-        }
     }
 
     private val _engineReady = MutableStateFlow(false)
@@ -305,9 +241,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
     private val responses = LinkedBlockingQueue<String>()
     private val analyzeLines = LinkedBlockingQueue<String>()
     private val analyzeCollecting = java.util.concurrent.atomic.AtomicBoolean(false)
-    // kata-raw-human-nn answers multi-line (policy grid); framed by blank line.
-    private val rawCollecting = java.util.concurrent.atomic.AtomicBoolean(false)
-    private val rawBuf = StringBuilder()
     private var readerThread: Thread? = null
     private val startMutex = Mutex()
     /**
@@ -551,9 +484,9 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
 
     /**
      * GTP routing: single-line `=`/`?` responses complete immediately;
-     * kata-analyze text lines (`info ...`, one report per line) route to the
-     * analyze buffer while collecting; kata-raw-human-nn's multi-line grid is
-     * framed by its terminating blank line. Everything else is diagnostics.
+     * kata-genmove_analyze text lines (`info ...`, one report per line)
+     * route to the analyze buffer while collecting. Everything else is
+     * diagnostics.
      */
     private fun startReader(reader: BufferedReader) {
         readerThread = Thread({
@@ -562,28 +495,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
                 while (reader.readLine().also { line = it } != null) {
                     val raw = line!!
                     val l = raw.trim()
-                    if (rawCollecting.get()) {
-                        if (l.isEmpty()) {
-                            // A blank with an EMPTY buffer is a stray terminator from
-                            // the previous streaming command (kata-analyze emits one
-                            // when the next command stops it) — not our payload's
-                            // end. Observed: raw-nn "succeeded" with 0 bytes in 7ms.
-                            val isEmpty: Boolean
-                            val combined: String
-                            synchronized(rawBuf) {
-                                isEmpty = rawBuf.isEmpty()
-                                combined = rawBuf.toString()
-                                rawBuf.clear()
-                            }
-                            if (!isEmpty) {
-                                rawCollecting.set(false)
-                                responses.offer(combined)
-                            }
-                        } else {
-                            synchronized(rawBuf) { rawBuf.append(raw).append("\n") }
-                        }
-                        continue
-                    }
                     if (l.isEmpty()) continue
                     if (l.startsWith("=") || l.startsWith("?") || PLAY_LINE.matches(l)) {
                         // `play <move>`: the genmove_analyze result line (v1.16
@@ -636,17 +547,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         command("kata-set-params $params")
     }
 
-    /**
-     * Analysis mode for candidates: HumanSL OFF (profile `_`) + unbiased params
-     * + wide root noise. The raw human policy is fetched BEFORE this (it needs
-     * the profile armed). BadukAI does the same before its analysis panel.
-     */
-    private suspend fun armAnalysisMode() {
-        command("kata-set-param humanSLProfile _")
-        val params = JSONObject(humanSlParamsOff().toMap()).toString()
-        command("kata-set-params $params")
-    }
-
     /** Reconcile the persistent board with our history (prefix-aware, self-healing). */
     private suspend fun syncTo(history: List<MoveRec>) {
         ensureStarted()
@@ -661,70 +561,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
         }
         enginePlies = history.size
     }
-
-    /** Multi-line responses (kata-raw-human-nn policy grid), blank-line framed. */
-    private suspend fun rawCommand(cmd: String, timeoutMs: Long = CMD_TIMEOUT_MS): String =
-        withContext(Dispatchers.IO) {
-            // Streaming commands (kata-analyze) print their "= " header up front
-            // and never terminate it — drain any such stale header so THIS
-            // command's payload can't be confused with it (observed: raw-nn
-            // returned the analyze header, "no policy grid in response").
-            responses.clear()
-            synchronized(rawBuf) { rawBuf.clear() }
-            rawCollecting.set(true)
-            try {
-                send(cmd)
-                withTimeout(timeoutMs) {
-                    responses.poll(timeoutMs, TimeUnit.MILLISECONDS)
-                } ?: throw IllegalStateException("KataGo GTP timeout on '$cmd'")
-            } finally {
-                rawCollecting.set(false)
-            }
-        }
-
-    /**
-     * Run kata-analyze and keep the richest report (most root visits). One
-     * report = one text line (`info ...` segments + `rootInfo ...`). The
-     * analysis keeps streaming until the next command, so the terminator
-     * doubles as the budget restore (see callers).
-     */
-    private suspend fun collectAnalyze(color: String, needVisits: Int, deadlineMs: Long): AnalyzeReport? =
-        withContext(Dispatchers.IO) {
-            analyzeLines.clear()
-            analyzeCollecting.set(true)
-            try {
-                send("kata-analyze $color 5 rootInfo true")
-                val tAnalyze = System.currentTimeMillis()
-                var best: AnalyzeReport? = null
-                var bestVisits = -1
-                val t0 = System.currentTimeMillis()
-                while (System.currentTimeMillis() - t0 < deadlineMs) {
-                    val line = analyzeLines.poll(200, TimeUnit.MILLISECONDS) ?: continue
-                    try {
-                        val rep = parseAnalyzeLine(line)
-                        val v = rep.root?.visits ?: 0
-                        if (rep.moves.isNotEmpty() && v >= bestVisits) {
-                            bestVisits = v
-                            best = rep
-                        }
-                        if (v >= needVisits) {
-                            Log.i(TAG, "analyze reached $v visits in ${System.currentTimeMillis() - tAnalyze}ms")
-                            break
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
-                if (bestVisits < needVisits) {
-                    Log.w(TAG, "analyze stalled at $bestVisits/$needVisits visits after ${System.currentTimeMillis() - tAnalyze}ms")
-                }
-                best
-            } finally {
-                analyzeCollecting.set(false)
-                // The analyze header ("= ") is printed at stream start and has no
-                // terminator: drop it now, or the NEXT command's wait consumes it.
-                responses.clear()
-            }
-        }
 
     // ---- GoEngine: board sync (persistent GTP tree) ----
 
@@ -781,82 +617,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
     }
 
     // ---- GoEngine: queries ----
-
-    override suspend fun candidates(
-        board: List<List<Int>>,
-        toMove: Int,
-        rank: Rank,
-        best: Int,
-        worst: Int,
-        history: List<MoveRec>,
-    ): List<Candidate> = engineMutex.withLock {
-        val n = best.coerceIn(0, 5) + worst.coerceIn(0, 5)
-        val t0 = System.currentTimeMillis()
-        try {
-            responses.clear() // drop stales from cancelled ops (see engineMutex)
-            syncTo(history)
-            setProfile(rank)
-            // Human priors from the human net (profile-aware): the TRUE
-            // humanlikeness signal. Falls back to search prior loudly-logged.
-            // v1.16 raw-human-nn takes ONLY the symmetry (no color arg;
-            // the color-first form is newer and errors here).
-            val grid: Map<Pair<Int, Int>, Double> = try {
-                val tRaw = System.currentTimeMillis()
-                val raw = rawCommand("kata-raw-human-nn 0")
-                Log.i(TAG, "raw human policy took ${System.currentTimeMillis() - tRaw}ms (${raw.length}B)")
-                parseRawHumanPolicy(raw)
-            } catch (e: Exception) {
-                Log.e(TAG, "raw human policy failed, falling back to search prior", e)
-                emptyMap()
-            }
-            // Broad, scored analysis (HumanSL off + wide root noise), then restore
-            // the play profile for the next bot reply.
-            armAnalysisMode()
-            val color = if (toMove == 1) "B" else "W"
-            val report = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
-            setProfile(rank)
-            // Symmetry-padded filler (minmoves/getAnalysisData) is not a real
-            // distinct candidate; keep it only if the real pool is too small.
-            val all = report?.moves ?: emptyList()
-            val real = all.filter { !it.padded }
-            val stats = if (real.size >= n) real else real + all.filter { it.padded }
-            if (stats.isEmpty()) throw IllegalStateException("KataGo analyze returned no legal moves")
-            // Orientation sanity (log-only): the grid's top move must at least BE
-            // one of the analyzed moves. Equality with the search's order-0 move
-            // is NOT expected — HumanSL move choice is PIK sampling over the human
-            // policy, not visit-argmax. Absent membership = transposed grid.
-            try {
-                val topGrid = grid.maxByOrNull { it.value }?.key
-                val searchPts = stats.mapNotNull { parsePoint(it.move) }.toSet()
-                if (topGrid != null && topGrid !in searchPts) {
-                    Log.w(TAG, "raw policy top $topGrid absent from analyzed moves (orientation?)")
-                }
-            } catch (_: Exception) {
-            }
-            fun entryOf(st: MoveStat): PoolEntry? {
-                val p = parsePoint(st.move) ?: return null
-                val hp = grid[p] ?: st.prior
-                return PoolEntry(p.first, p.second, hp, st.winrate, st.scoreLead)
-            }
-            // Pools need real scores for gap math: analyzed moves only.
-            val h = stats.sortedByDescending { grid[it.move.let { m -> parsePoint(m) }] ?: it.prior }.mapNotNull { entryOf(it) }
-            val s = stats.sortedByDescending { it.scoreLead }.mapNotNull { entryOf(it) }
-            Log.i(
-                TAG,
-                "candidates pool: ${real.size} real / ${all.size} total, " +
-                    "human pool ${CandidateSelector.humanPool(h).size}, n=$n",
-            )
-            if (h.isEmpty()) throw IllegalStateException("KataGo analyze returned no playable moves")
-            // Scores are engine (BLACK-perspective); the selector re-bases them
-            // to the side to move so White's groups are White's.
-            val out = CandidateSelector.selectBestWorst(h, s.ifEmpty { h }, best, worst, toMove)
-            Log.i(TAG, "candidates took ${System.currentTimeMillis() - t0}ms (${stats.size} moves)")
-            out
-        } catch (e: Exception) {
-            Log.e(TAG, "candidates failed", e)
-            throw e as? IllegalStateException ?: IllegalStateException("KataGo candidates failed: ${e.message}", e)
-        }
-    }
 
     override suspend fun genMove(
         board: List<List<Int>>,
@@ -937,30 +697,6 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
             Log.e(TAG, "genMove failed", e)
             throw e as? IllegalStateException ?: IllegalStateException("KataGo genMove failed: ${e.message}", e)
         }
-        }
-    }
-
-    override suspend fun evaluate(
-        board: List<List<Int>>,
-        move: Pair<Int, Int>,
-        toMove: Int,
-        rank: Rank,
-        history: List<MoveRec>,
-    ): Evaluation = engineMutex.withLock {
-        try {
-            responses.clear()
-            syncTo(history)
-            setProfile(rank)
-            armAnalysisMode()
-            armAnalysisMode()
-            val color = if (toMove == 1) "B" else "W"
-            val best = collectAnalyze(color, ANALYZE_VISITS, ANALYZE_TIMEOUT_MS)
-            setProfile(rank)
-            val root = best?.root
-            Evaluation(root?.winrate ?: 0.5, root?.scoreLead ?: 0.0)
-        } catch (e: Exception) {
-            Log.e(TAG, "evaluate failed", e)
-            throw e as? IllegalStateException ?: IllegalStateException("KataGo evaluate failed: ${e.message}", e)
         }
     }
 

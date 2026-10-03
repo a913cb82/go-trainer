@@ -1,10 +1,7 @@
 package com.gotrainer.nine
 
-import com.gotrainer.nine.game.BotRatings
-import com.gotrainer.nine.game.Candidate
 import com.gotrainer.nine.game.ColorChoice
 import com.gotrainer.nine.game.Difficulty
-import com.gotrainer.nine.game.EvaluatedMove
 import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.GameStateSerde
 import com.gotrainer.nine.game.GoBoard
@@ -15,31 +12,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class GameStateSerdeTest {
-    private val cand = Candidate(4, 4, "A", 0.3, 0.55, 2.5, 0.0, "good")
-    private val cand2 = Candidate(2, 3, "B", 0.1, 0.4, -1.5, 4.0, "ok")
-    private val eval = EvaluatedMove(4, 4, "A", 0.3, 0.55, 2.5, 0.0, 1.2, "good")
-
     private fun midGame() = GameState(
         history = listOf(
-            MoveRec(4, 4, 1, cand, null),
+            MoveRec(4, 4, 1),
             MoveRec(3, 4, -1),
             MoveRec(-1, -1, 1),
-            MoveRec(2, 3, -1, cand2, 4.0),
+            MoveRec(2, 3, -1),
         ),
         toMove = 1,
         rank = Rank.R8K,
-        multipleChoice = true,
-        bestCount = 2,
-        worstCount = 3,
-        candidates = listOf(cand, cand2),
-        evaluations = listOf(eval),
-        showFeedback = true,
-        feedbackScopeAll = false,
         winrateHistory = listOf(0.5, 0.55, 0.55, 0.4),
         passing = 1,
         reviewIdx = 2,
-        pastCandidates = mapOf(1 to listOf(cand), 3 to listOf(cand, cand2)),
-        pastEvals = mapOf(1 to listOf(eval)),
         colorChoice = ColorChoice.RANDOM,
         playerColor = -1,
         undoUsed = true,
@@ -84,12 +68,18 @@ class GameStateSerdeTest {
         assertNull(GameStateSerde.decode(GameStateSerde.encode(midGame()).replace("0.55", "xyz")))
     }
 
-    @Test fun `pre-ranked 20-field blobs decode as ranked`() {
-        val blob = GameStateSerde.encode(midGame().copy(ranked = false))
-        val legacy = blob.split("\n").let { lines ->
-            (listOf(lines[0]) + listOf(lines[1].split(",").dropLast(1).joinToString(",")) + lines.drop(2)).joinToString("\n")
-        }
-        assertEquals(20, legacy.split("\n")[1].split(",").size)
-        assertEquals(true, GameStateSerde.decode(legacy)!!.ranked)
+    @Test fun `v1 multiple-choice blobs no longer decode (fresh game)`() {
+        val v1 = listOf(
+            "v1",
+            "1,-1,playing,1,8k,1,2,3,random,1,0,2,1,automatch,70,1,null,1,1358.0,12k ±3,1",
+            "4,4,1;3,4,-1;-1,-1,1;2,3,-1",
+            "NULL",
+            "NULL",
+            "0.5,0.55,0.55,0.4",
+            "",
+            "",
+            "NULL",
+        ).joinToString("\n")
+        assertNull(GameStateSerde.decode(v1))
     }
 }
