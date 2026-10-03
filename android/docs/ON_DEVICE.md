@@ -4,6 +4,11 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## Chooser-only rims merged + installed (2026-10-03, `stone-chooseron` -> main)
+
+Board back to legacy rims. Installed over WiFi adb, launches clean onto
+the finished Black +31.5 board (legacy stones confirmed on glass).
+
 ## Shared stones + uniform rims merged + installed (2026-10-03, `stone-graphics`+`stone-rims` -> main)
 
 One drawGoStone for chooser/board/animations. Black rim white, white rim
