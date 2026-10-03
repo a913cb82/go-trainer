@@ -417,7 +417,8 @@ private fun RatingGraph(
         .onSizeChanged { plotW = it.width.toFloat() }
         .pointerInput(xMode) {
             awaitEachGesture {
-                awaitFirstDown()
+                // Tap detection consumes the down; we only observe, so take it consumed or not.
+                awaitFirstDown(requireUnconsumed = false)
                 if (yViewRef.value == null) setYViewRef.value(visMinMaxRef.value)
                 do {
                     val event = awaitPointerEvent()
