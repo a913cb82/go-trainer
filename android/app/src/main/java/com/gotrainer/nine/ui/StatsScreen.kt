@@ -152,6 +152,9 @@ internal fun timeXTicks(firstTs: Long, lastTs: Long): List<Long> {
     return out
 }
 
+/** Day/month in British order (3/10), regardless of device locale. */
+internal fun dayMonthFormat(): SimpleDateFormat = SimpleDateFormat("d/M", Locale.UK)
+
 internal fun gamesXValues(gameNos: List<Int>, historySize: Int, full: Boolean): List<Float> =
     if (full) gameNos.map { it.toFloat() / historySize }
     else {
@@ -303,7 +306,7 @@ private fun RatingGraph(
     val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = onSurface)
-    val dateFmt = remember { SimpleDateFormat("M/d", Locale.US) }
+    val dateFmt = remember { dayMonthFormat() }
     // Window slices the newest games; game 0 (the 20k start dot) joins only
     // when the window covers the whole history. The y axis fits rating
     // points only — the band may run off the chart, and yOf clips it.

@@ -114,4 +114,14 @@ class StatsScreenTest {
         val first = 1_757_000_000_000L
         assertEquals(emptyList<Long>(), timeXTicks(first, first + 3_600_000L))
     }
+
+    @Test fun `dates render day before month`() {
+        // British order whatever the device locale; field-derived so it
+        // holds in every timezone (no single instant is the 3rd worldwide).
+        val ts = 1_759_465_200_000L // 2025-10-03 12:00 UTC
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = ts
+        val expected = "${cal.get(java.util.Calendar.DAY_OF_MONTH)}/${cal.get(java.util.Calendar.MONTH) + 1}"
+        assertEquals(expected, dayMonthFormat().format(java.util.Date(ts)))
+    }
 }
