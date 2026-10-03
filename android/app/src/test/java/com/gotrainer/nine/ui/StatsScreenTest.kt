@@ -53,4 +53,65 @@ class StatsScreenTest {
     @Test fun `single-game window does not divide by zero`() {
         assertEquals(listOf(0f), gamesXValues(listOf(139), 139, full = false))
     }
+
+    @Test fun `games ticks land on round numbers`() {
+        // 209-game history: multiples of 50, endpoints framed, not forced.
+        val ticks = gamesXTicks(0, 209)
+        assertEquals(listOf(0, 50, 100, 150, 200), ticks)
+    }
+
+    @Test fun `games ticks stay absolute inside windows`() {
+        // 10-game window 200..209: step 2 keeps true numbers, ~5 lines.
+        val ticks = gamesXTicks(200, 209)
+        assertEquals(listOf(200, 202, 204, 206, 208), ticks)
+    }
+
+    @Test fun `degenerate games span yields no interior ticks`() {
+        assertEquals(emptyList<Int>(), gamesXTicks(139, 139))
+    }
+
+    @Test fun `short time span ticks whole days`() {
+        // 6 days of evening games: daily local midnights, strictly inside.
+        val day = 86_400_000L
+        val first = 1_757_000_000_000L // fixed anchor, tz-relative asserts
+        val ticks = timeXTicks(first, first + 6 * day)
+        assertTrue("need several dailies, got $ticks", ticks.size in 3..7)
+        val cal = java.util.Calendar.getInstance()
+        for (t in ticks) {
+            cal.timeInMillis = t
+            assertEquals(0, cal.get(java.util.Calendar.HOUR_OF_DAY))
+            assertEquals(0, cal.get(java.util.Calendar.MINUTE))
+            assertTrue(t in first..first + 6 * day)
+        }
+        assertEquals(ticks.sorted(), ticks)
+    }
+
+    @Test fun `month time span ticks mondays`() {
+        val day = 86_400_000L
+        val first = 1_757_000_000_000L
+        val ticks = timeXTicks(first, first + 45 * day)
+        assertTrue("need several weeklies, got $ticks", ticks.size in 4..8)
+        val cal = java.util.Calendar.getInstance()
+        for (t in ticks) {
+            cal.timeInMillis = t
+            assertEquals(java.util.Calendar.MONDAY, cal.get(java.util.Calendar.DAY_OF_WEEK))
+        }
+    }
+
+    @Test fun `year time span ticks month starts`() {
+        val day = 86_400_000L
+        val first = 1_757_000_000_000L
+        val ticks = timeXTicks(first, first + 400 * day)
+        assertTrue("need several monthlies, got $ticks", ticks.size in 4..14)
+        val cal = java.util.Calendar.getInstance()
+        for (t in ticks) {
+            cal.timeInMillis = t
+            assertEquals(1, cal.get(java.util.Calendar.DAY_OF_MONTH))
+        }
+    }
+
+    @Test fun `same-day time span yields no ticks`() {
+        val first = 1_757_000_000_000L
+        assertEquals(emptyList<Long>(), timeXTicks(first, first + 3_600_000L))
+    }
 }

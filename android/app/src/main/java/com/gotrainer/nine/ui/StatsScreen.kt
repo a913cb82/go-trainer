@@ -70,6 +70,88 @@ internal fun rankAxisTicks(minRank: Double, maxRank: Double): List<Int> {
  * n/size, start dot at 0); a window spreads across the plot so the newest N
  * games use the whole width. Labels stay true game numbers either way.
  */
+/**
+ * Games-x gridlines: round game numbers, never even pixel divisions.
+ * Step is the smallest of 1/2/5 x 10^k holding the span to ~5 lines;
+ * ticks stay absolute so a window shows the same numbers as All.
+ */
+internal fun gamesXTicks(firstNo: Int, lastNo: Int): List<Int> {
+    val span = lastNo - firstNo
+    if (span <= 0) return emptyList()
+    var mag = 1
+    var step = 1
+    while (span / step > 5) {
+        step = when (step / mag) {
+            1 -> 2 * mag
+            2 -> 5 * mag
+            else -> { mag *= 10; mag }
+        }
+    }
+    return ((firstNo + step - 1) / step * step..lastNo step step).toList()
+}
+
+private const val DAY_MS = 86_400_000L
+
+/**
+ * Time-x gridlines: true calendar boundaries for the span — local
+ * midnights under ~12 days, Mondays under ~4 months, month starts beyond.
+ * Steps widen to hold ~5 lines. Under ~1.5 days there is nothing sane to
+ * draw (same-evening bursts), so no interior ticks.
+ */
+internal fun timeXTicks(firstTs: Long, lastTs: Long): List<Long> {
+    val spanDays = (lastTs - firstTs).toDouble() / DAY_MS
+    if (spanDays < 1.5) return emptyList()
+    val cal = java.util.Calendar.getInstance()
+    val out = mutableListOf<Long>()
+    if (spanDays < 12) {
+        val stepDays = maxOf(1, (spanDays / 5).roundToInt())
+        cal.timeInMillis = firstTs
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        if (cal.timeInMillis < firstTs) cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        var day = 0
+        while (cal.timeInMillis <= lastTs) {
+            if (day % stepDays == 0) out.add(cal.timeInMillis)
+            cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+            day++
+        }
+    } else if (spanDays < 120) {
+        val stepWeeks = maxOf(1, (spanDays / 7 / 5).roundToInt())
+        cal.timeInMillis = firstTs
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        var delta = (java.util.Calendar.MONDAY - cal.get(java.util.Calendar.DAY_OF_WEEK) + 7) % 7
+        if (delta == 0 && cal.timeInMillis < firstTs) delta = 7
+        cal.add(java.util.Calendar.DAY_OF_MONTH, delta)
+        var week = 0
+        while (cal.timeInMillis <= lastTs) {
+            if (week % stepWeeks == 0) out.add(cal.timeInMillis)
+            cal.add(java.util.Calendar.DAY_OF_MONTH, 7)
+            week++
+        }
+    } else {
+        val stepMonths = maxOf(1, (spanDays / 30 / 5).roundToInt())
+        cal.timeInMillis = firstTs
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        if (cal.timeInMillis < firstTs) cal.add(java.util.Calendar.MONTH, 1)
+        var month = 0
+        while (cal.timeInMillis <= lastTs) {
+            if (month % stepMonths == 0) out.add(cal.timeInMillis)
+            cal.add(java.util.Calendar.MONTH, 1)
+            month++
+        }
+    }
+    return out
+}
+
 internal fun gamesXValues(gameNos: List<Int>, historySize: Int, full: Boolean): List<Float> =
     if (full) gameNos.map { it.toFloat() / historySize }
     else {
@@ -250,6 +332,25 @@ private fun RatingGraph(
             else shownHist.map { ((it.ts - t0) / span).toFloat() }
         }
     }
+    // X gridline ticks as (position, label): round game numbers in Games
+    // mode (same normalization as the dots), calendar boundaries in Time.
+    val xTickTs: List<Pair<Float, String>> = remember(shown, xMode) {
+        if (xMode == StatsX.GAMES) {
+            val first = gameNos.first()
+            val span = (gameNos.size - 1).takeIf { it > 0 } ?: 1
+            gamesXTicks(first, gameNos.last()).map { g ->
+                val t = if (shown.third) g.toFloat() / history.size
+                else (g - first).toFloat() / span
+                t to "$g"
+            }
+        } else {
+            val t0 = shownHist.first().ts.toDouble()
+            val span = (shownHist.last().ts - shownHist.first().ts).toDouble().takeIf { it > 0 } ?: 1.0
+            timeXTicks(shownHist.first().ts, shownHist.last().ts).map { ts ->
+                ((ts - t0) / span).toFloat() to dateFmt.format(Date(ts))
+            }
+        }
+    }
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)) {
         val left = 40.dp.toPx()
         val bottom = 22.dp.toPx()
@@ -295,14 +396,37 @@ private fun RatingGraph(
                 )
             }
         }
+        // X gridlines, fainter than the rank lines; labels yield to the
+        // endpoints, then to each other left to right.
+        val gridColor = onSurface.copy(alpha = 0.12f)
+        for ((t, _) in xTickTs) {
+            val x = xOf(t)
+            drawLine(gridColor, Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
+        }
         // X endpoints: true game numbers (a window starts mid-history).
         val xLabel = { i: Int ->
             if (xMode == StatsX.GAMES) "${gameNos[i]}"
             else dateFmt.format(Date(shownHist[if (shown.third) maxOf(i - 1, 0) else i].ts))
         }
+        val gapPx = 4.dp.toPx()
+        val taken = mutableListOf<Pair<Float, Float>>()
+        fun claim(cx: Float, lw: Float): Boolean {
+            if (taken.any { (a, b) -> cx - lw / 2 < b + gapPx && cx + lw / 2 > a - gapPx }) return false
+            taken.add(cx - lw / 2 to cx + lw / 2)
+            return true
+        }
         val first = textMeasurer.measure(xLabel(0), labelStyle)
         drawText(first, onSurface, topLeft = Offset(left - first.size.width / 2f, h + 4.dp.toPx()))
+        claim(left, first.size.width.toFloat())
         val last = textMeasurer.measure(xLabel(display.size - 1), labelStyle)
         drawText(last, onSurface, topLeft = Offset(left + w - last.size.width / 2f, h + 4.dp.toPx()))
+        claim(left + w, last.size.width.toFloat())
+        for ((t, s) in xTickTs) {
+            if (t <= 1e-6f || t >= 1f - 1e-6f) continue
+            val layout = textMeasurer.measure(s, labelStyle)
+            val cx = xOf(t)
+            if (claim(cx, layout.size.width.toFloat()))
+                drawText(layout, onSurface, topLeft = Offset(cx - layout.size.width / 2f, h + 4.dp.toPx()))
+        }
     }
 }

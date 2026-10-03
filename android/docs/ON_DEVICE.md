@@ -233,3 +233,10 @@ engine. The PC `server/` remains as a dev tool, unreferenced by the app.
 - Stats on 209-game history: 10k ±1, curve backfilled under v3, per-game
   points render, no stuck "Updating" state. (Two black screencaps during
   verify were a resume-transition artifact, not a crash — app renders fine.)
+
+## Stats x-gridlines (games + time)
+- Helpers `gamesXTicks` (1/2/5 steps, absolute numbers) + `timeXTicks`
+  (midnights/Mondays/month-starts by span, <1.5d none); 8 unit tests.
+- Phone: Games/All shows 0/50/100/150/200; Time/All shows daily M/d lines
+  with collision-skipped labels. No crash. (Black screencaps mid-session
+  were display-off captures, not app state — app renders throughout.)
