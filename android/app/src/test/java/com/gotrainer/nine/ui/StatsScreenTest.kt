@@ -157,6 +157,41 @@ class StatsScreenTest {
         assertEquals(MIN_VIEW_SPAN, tiny.span, 1e-6f)
     }
 
+    @Test fun `double tap zooms 2x centered on the tap`() {
+        val v = XView(0f, 1f).zoomAt(fraction = 0.75f)
+        assertEquals(0.5f, v.span, 1e-6f)
+        assertEquals(0.75f, v.start + v.span / 2, 1e-6f)
+    }
+
+    @Test fun `double tap near an edge clamps inside the range`() {
+        val left = XView(0f, 1f).zoomAt(fraction = 0.05f)
+        assertEquals(0f, left.start, 1e-6f)
+        val right = XView(0f, 1f).zoomAt(fraction = 0.97f)
+        assertEquals(1f, right.end, 1e-6f)
+    }
+
+    @Test fun `y holds when the visible range stays inside with margin`() {
+        // Small pan, small zoom-out, small zoom-in: no rescale either way.
+        val frozen = 10.0 to 14.0
+        assertFalse(yRescaleWanted(frozen, 10.2 to 13.8))
+        assertFalse(yRescaleWanted(frozen, 9.8 to 14.2))
+        assertFalse(yRescaleWanted(frozen, 10.5 to 13.5))
+    }
+
+    @Test fun `y rescales on overflow and on big zoom-in`() {
+        val frozen = 10.0 to 14.0
+        assertTrue(yRescaleWanted(frozen, 9.0 to 13.0))
+        assertTrue(yRescaleWanted(frozen, 11.0 to 15.0))
+        assertTrue(yRescaleWanted(frozen, 11.0 to 13.0))
+    }
+
+    @Test fun `padded domain covers the visible range with headroom`() {
+        val (lo, hi) = paddedNiceDomain(10.2 to 13.8)
+        assertTrue("lo=$lo", lo <= 10.2)
+        assertTrue("hi=$hi", hi >= 13.8)
+        assertTrue("headroom", (hi - lo) > (13.8 - 10.2))
+    }
+
     @Test fun `visible range keeps edge neighbors for line continuity`() {
         val ts = listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
         assertEquals(0..4, visibleRange(5, ts, XView(0f, 1f)))

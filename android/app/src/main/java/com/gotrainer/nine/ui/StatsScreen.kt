@@ -1,6 +1,9 @@
 package com.gotrainer.nine.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -28,6 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +43,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -175,6 +182,40 @@ private val doubleTapTimeoutMs = android.view.ViewConfiguration.getDoubleTapTime
 internal fun XView.panned(dFrac: Float): XView {
     val ns = (start + dFrac).coerceIn(0f, 1f - span)
     return XView(ns, ns + span)
+}
+
+/** Double-tap: halve the span around the tap fraction, clamped inside. */
+internal fun XView.zoomAt(fraction: Float): XView {
+    val s = (span / 2f).coerceIn(MIN_VIEW_SPAN, 1f)
+    val ns = (fraction - s / 2).coerceIn(0f, 1f - s)
+    return XView(ns, ns + s)
+}
+
+private const val Y_OVERFLOW_FRAC = 0.10
+private const val Y_SHRINK_FRAC = 0.75
+private const val Y_PAD_FRAC = 0.05
+
+/**
+ * Hysteresis, both directions: hold the frozen y domain while the visible
+ * range fits inside it (10% margin) and hasn't shrunk past 75% — small
+ * pans and zooms then rescale never instead of abruptly.
+ */
+internal fun yRescaleWanted(frozen: Pair<Double, Double>, vis: Pair<Double, Double>): Boolean {
+    val (lo, hi) = frozen
+    val span = hi - lo
+    if (span <= 0) return true
+    val (vlo, vhi) = vis
+    val m = Y_OVERFLOW_FRAC * span
+    if (vlo < lo - m || vhi > hi + m) return true
+    return (vhi - vlo) < span * Y_SHRINK_FRAC
+}
+
+/** Padded whole-rank domain around the visible range: the tween's landing. */
+internal fun paddedNiceDomain(vis: Pair<Double, Double>): Pair<Double, Double> {
+    val (vlo, vhi) = vis
+    val pad = Y_PAD_FRAC * (vhi - vlo)
+    val ticks = rankAxisTicks(vlo - pad, vhi + pad)
+    return ticks.first().toDouble() to ticks.last().toDouble()
 }
 
 /**
@@ -366,7 +407,13 @@ private fun RatingGraph(
     val setYViewRef = rememberUpdatedState({ y: Pair<Double, Double>? -> yView = y })
     val visMinMax = remember(visRanks) { visRanks.min() to visRanks.max() }
     val visMinMaxRef = rememberUpdatedState(visMinMax)
-    val yMinMax = yView ?: visMinMax
+    // Resting y domain: what the axis shows between gestures. Null means
+    // follow the viewport (initial state); settle() either holds the frozen
+    // domain (hysteresis) or tweens it to padded nice bounds.
+    var yDisp by remember(history, xMode) { mutableStateOf<Pair<Double, Double>?>(null) }
+    val yDispRef = rememberUpdatedState(yDisp)
+    val setYDispRef = rememberUpdatedState({ y: Pair<Double, Double>? -> yDisp = y })
+    val yMinMax = yView ?: yDisp ?: visMinMax
     val ticks = remember(yMinMax) { rankAxisTicks(yMinMax.first, yMinMax.second) }
     // Games x keeps true game numbers.
     val gameNos = remember(shown) {
@@ -412,9 +459,46 @@ private fun RatingGraph(
     val onToggleXRef = rememberUpdatedState(onToggleX)
     val slopRef = rememberUpdatedState(LocalViewConfiguration.current.touchSlop)
     val stripRef = rememberUpdatedState(axisStripPx)
-    var lastStripTap by remember(history, xMode) { mutableStateOf(0L) }
-    val lastStripTapRef = rememberUpdatedState(lastStripTap)
-    val setLastStripTapRef = rememberUpdatedState({ t: Long -> lastStripTap = t })
+    val leftPxRef = rememberUpdatedState(leftPx)
+    val plotWRef = rememberUpdatedState(plotW)
+    val ranksRef = rememberUpdatedState(ranks)
+    val fullTRef = rememberUpdatedState(fullT)
+    var lastTap by remember(history, xMode) { mutableStateOf<Pair<Offset, Long>?>(null) }
+    val lastTapRef = rememberUpdatedState(lastTap)
+    val setLastTapRef = rememberUpdatedState({ t: Pair<Offset, Long>? -> lastTap = t })
+    val scope = rememberCoroutineScope()
+    val tweenHolder = remember { mutableStateOf<Job?>(null) }
+    LaunchedEffect(history, xMode) {
+        tweenHolder.value?.cancel()
+        tweenHolder.value = null
+    }
+    // Visible data range for an arbitrary viewport (fresh even mid-frame,
+    // unlike the remembered visMinMax).
+    fun minMaxFor(v: XView): Pair<Double, Double> {
+        val r = ranksRef.value
+        if (r.isEmpty()) return 0.0 to 0.0
+        val sub = r.slice(visibleRange(r.size, fullTRef.value, v))
+        return sub.min() to sub.max()
+    }
+    // Release policy: hold the frozen domain through small changes
+    // (hysteresis, both directions), else tween to padded nice bounds.
+    fun settle(frozen: Pair<Double, Double>, vis: Pair<Double, Double>) {
+        if (!yRescaleWanted(frozen, vis)) {
+            tweenHolder.value?.cancel()
+            setYDispRef.value(frozen)
+            return
+        }
+        val target = paddedNiceDomain(vis)
+        tweenHolder.value?.cancel()
+        tweenHolder.value = scope.launch {
+            animate(0f, 1f, animationSpec = tween(250, easing = EaseOutCubic)) { t, _ ->
+                setYDispRef.value(
+                    (frozen.first + (target.first - frozen.first) * t) to
+                        (frozen.second + (target.second - frozen.second) * t),
+                )
+            }
+        }
+    }
     // Y freezes on first finger down and releases on last finger up.
     // A press-tracking loop owns that truth; the transform loop below only
     // moves the viewport. (The first attempt never even called its freezer —
@@ -422,15 +506,15 @@ private fun RatingGraph(
     // Neither loop consumes, so both observe the same stream.
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)
         .onSizeChanged { plotW = it.width.toFloat() }
-        // One loop owns press truth (y-freeze) AND taps. detectTapGestures
-        // holds every tap for the double-tap timeout, which made the axis
-        // toggle feel laggy; here a tap fires on finger-up, instantly.
-        // Double-tap = two instant toggles (net mode unchanged) + view reset.
+        // One loop owns press truth (y-freeze) AND taps. A tap fires on
+        // finger-up, instantly (detectTapGestures held every tap for the
+        // double-tap timeout). Plot double-tap zooms 2x onto the tap.
         .pointerInput(xMode) {
             awaitEachGesture {
                 // Tap detection consumes the down; we only observe, so take it consumed or not.
                 val down = awaitFirstDown(requireUnconsumed = false)
-                if (yViewRef.value == null) setYViewRef.value(visMinMaxRef.value)
+                tweenHolder.value?.cancel()
+                if (yViewRef.value == null) setYViewRef.value(yDispRef.value ?: visMinMaxRef.value)
                 var upPos = down.position
                 var upTime = down.uptimeMillis
                 var multi = false
@@ -447,17 +531,31 @@ private fun RatingGraph(
                         }
                     }
                 } while (event.changes.any { it.pressed })
+                val frozen = yViewRef.value ?: minMaxFor(viewRef.value)
                 setYViewRef.value(null)
-                if (!multi && !moved && upTime - down.uptimeMillis < tapTimeoutMs &&
-                    upPos.y >= size.height - stripRef.value
-                ) {
+                val isTap = !multi && !moved && upTime - down.uptimeMillis < tapTimeoutMs
+                if (isTap && upPos.y >= size.height - stripRef.value) {
+                    setLastTapRef.value(null)
                     onToggleXRef.value()
-                    val now = upTime
-                    if (now - lastStripTapRef.value < doubleTapTimeoutMs) {
-                        setYViewRef.value(null)
-                        onViewRef.value(XView(0f, 1f))
+                } else if (isTap) {
+                    val last = lastTapRef.value
+                    if (last != null && upTime - last.second < doubleTapTimeoutMs &&
+                        (down.position - last.first).getDistance() <= 2 * slopRef.value
+                    ) {
+                        val w = plotWRef.value - leftPxRef.value
+                        if (w > 0f) {
+                            val t = ((upPos.x - leftPxRef.value) / w).coerceIn(0f, 1f)
+                            val nv = viewRef.value.zoomAt(t)
+                            onViewRef.value(nv)
+                            setLastTapRef.value(null)
+                            settle(frozen, minMaxFor(nv))
+                        }
+                    } else {
+                        setLastTapRef.value(down.position to upTime)
+                        settle(frozen, minMaxFor(viewRef.value))
                     }
-                    setLastStripTapRef.value(now)
+                } else {
+                    settle(frozen, minMaxFor(viewRef.value))
                 }
             }
         }
