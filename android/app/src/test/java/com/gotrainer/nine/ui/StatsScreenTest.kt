@@ -47,6 +47,13 @@ class StatsScreenTest {
         assertEquals(listOf(9, 12, 15, 18, 21), ticks)
     }
 
+    @Test fun `min window expands toward weaker ranks first`() {
+        // A (10.05, 10.48) sliver padded upward-only to [10, 11, 12]: the
+        // domain centered on 9k while the data sat at 10.2k, showing an
+        // untouched 8k gridline. Centered, the domain reads 9k..11k.
+        assertEquals(listOf(9, 10, 11), rankAxisTicks(10.05, 10.48))
+    }
+
     @Test fun `windowed games-x spreads across the plot`() {
         // 10-game window of 139 used raw n/size, squeezing every dot into
         // the right 7% of the plot. Labels stay true numbers; positions

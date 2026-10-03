@@ -75,12 +75,13 @@ import kotlin.math.roundToInt
 internal fun rankAxisTicks(minRank: Double, maxRank: Double): List<Int> {
     var lo = floor(minRank).toInt()
     var hi = ceil(maxRank).toInt()
-    if (hi - lo < 2) hi = lo + 2
     lo = max(0, lo)
     hi = min(28, hi)
-    if (hi - lo < 2) {
-        hi = min(28, lo + 2)
-        lo = max(0, hi - 2)
+    // Widen a sub-2-rank window toward weaker ranks first (down-screen):
+    // upward-only padding centers the domain above the data, stranding an
+    // untouched stronger gridline (the far-right phantom 8k).
+    while (hi - lo < 2) {
+        if (lo > 0) lo-- else hi++
     }
     val span = hi - lo
     val step = max(1, (span / 4.0).roundToInt())
@@ -634,6 +635,7 @@ private fun RatingGraph(
         fun yRaw(rank: Double): Float = h - ((rank - lo) / (hi - lo)).toFloat() * h
         fun yOf(rank: Double): Float = yRaw(rank.coerceIn(lo.toDouble(), hi.toDouble()))
         fun xOf(t: Float): Float = left + t * w
+
         // Y ticks (axis furniture draws unclipped). Out-of-range ticks drop:
         // the data mapping is raw, so edge ticks would stack on the borders.
         for (t in ticks) {
