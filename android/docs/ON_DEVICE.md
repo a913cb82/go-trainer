@@ -29,6 +29,11 @@ accelerator chip. SNPE is Qualcomm's toolkit for it.
   push `3.1s` at `25.6 MB/s`, md5 matched). Same mid-game resumes, warmup
   `527ms`, no crash. First Stats open will run the one-time curve backfill
   in the background ("Updating rating curve…" until the cache completes).
+- 20k-ladder update `versionCode=1791023771` (`2026-10-03 11:36:43`, WiFi
+  push `4.0s` at `20.2 MB/s`, md5 matched, zero `R30K` strings in dex).
+  Phone was asleep + locked (black screencaps); `KEYCODE_WAKEUP` then swipe
+  up dismissed the keyguard. Same mid-game resumes, header now reads 20k
+  (was 30k), engine ready `2877ms`, warmup `693ms`, no crash.
 
 ## Prior state (2026-09-20)
 
