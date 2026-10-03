@@ -1,5 +1,12 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Gesture fix merged + installed (2026-10-03, `stats-gestures` -> main)
+
+Root cause of the one-step gestures found on PC: the detectors were keyed
+on the viewport, restarting mid-gesture. Stable keys + refs now; trajectory
+clipped to the plot; preset row and hint caption removed. Installed over
+WiFi adb, launches clean (empty board, 14k). Finger-feel retest pending.
+
 ## Stats gestures merged + installed (2026-10-03, `stats-zoom` -> main)
 
 Merged `0e53f21` to main, `installDebug` over WiFi adb clean, app launches
