@@ -210,12 +210,16 @@ internal fun yRescaleWanted(frozen: Pair<Double, Double>, vis: Pair<Double, Doub
     return (vhi - vlo) < span * Y_SHRINK_FRAC
 }
 
-/** Padded whole-rank domain around the visible range: the tween's landing. */
-internal fun paddedNiceDomain(vis: Pair<Double, Double>): Pair<Double, Double> {
+/**
+ * Padded raw domain around the visible range: the tween's landing. Raw,
+ * not tick-snapped: rankAxisTicks re-expands its input by design, so
+ * feeding tick bounds back through it widens every landing (correct glide,
+ * wrong rest). Ticks derive from this each render and may overshoot it.
+ */
+internal fun paddedDomain(vis: Pair<Double, Double>): Pair<Double, Double> {
     val (vlo, vhi) = vis
     val pad = Y_PAD_FRAC * (vhi - vlo)
-    val ticks = rankAxisTicks(vlo - pad, vhi + pad)
-    return ticks.first().toDouble() to ticks.last().toDouble()
+    return (vlo - pad) to (vhi + pad)
 }
 
 /**
@@ -498,7 +502,7 @@ private fun RatingGraph(
             setYDispRef.value(frozen)
             return
         }
-        val target = paddedNiceDomain(vis)
+        val target = paddedDomain(vis)
         tweenHolder.value?.cancel()
         setYDispRef.value(target)
         tweenHolder.value = scope.launch {
@@ -594,8 +598,10 @@ private fun RatingGraph(
         val bottom = 40.dp.toPx()
         val w = size.width - left
         val h = size.height - bottom
-        // Data mapping glides during tweens; furniture already shows the target.
-        val mapDom = yMap ?: (ticks.first().toDouble() to ticks.last().toDouble())
+        // Data mapping uses the raw domain (gliding during tweens); the
+        // tick bounds would re-expand it. Furniture derives from the same
+        // domain and may overshoot, which is honest headroom.
+        val mapDom = yMap ?: yMinMax
         val lo = mapDom.first.toFloat()
         val hi = mapDom.second.toFloat().takeIf { it > lo } ?: (lo + 1)
         fun yRaw(rank: Double): Float = h - ((rank - lo) / (hi - lo)).toFloat() * h

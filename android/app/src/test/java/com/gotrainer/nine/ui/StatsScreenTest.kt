@@ -186,7 +186,7 @@ class StatsScreenTest {
     }
 
     @Test fun `padded domain covers the visible range with headroom`() {
-        val (lo, hi) = paddedNiceDomain(10.2 to 13.8)
+        val (lo, hi) = paddedDomain(10.2 to 13.8)
         assertTrue("lo=$lo", lo <= 10.2)
         assertTrue("hi=$hi", hi >= 13.8)
         assertTrue("headroom", (hi - lo) > (13.8 - 10.2))
