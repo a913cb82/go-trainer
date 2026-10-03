@@ -424,7 +424,10 @@ private fun RatingGraph(
     var yMap by remember(history, xMode) { mutableStateOf<Pair<Double, Double>?>(null) }
     val yMapRef = rememberUpdatedState(yMap)
     val setYMapRef = rememberUpdatedState({ y: Pair<Double, Double>? -> yMap = y })
-    val yMinMax = yView ?: yDisp ?: visMinMax
+    // The resting domain always carries the landing padding — including the
+    // initial full view, which used to map the raw data edge-to-edge.
+    val paddedRest = remember(visMinMax) { paddedDomain(visMinMax) }
+    val yMinMax = yView ?: yDisp ?: paddedRest
     val ticks = remember(yMinMax) { rankAxisTicks(yMinMax.first, yMinMax.second) }
     // Games x keeps true game numbers.
     val gameNos = remember(shown) {
@@ -536,7 +539,7 @@ private fun RatingGraph(
                 val liveMap = yMapRef.value
                 setYMapRef.value(null)
                 if (yViewRef.value == null)
-                    setYViewRef.value(liveMap ?: yDispRef.value ?: visMinMaxRef.value)
+                    setYViewRef.value(liveMap ?: yDispRef.value ?: paddedDomain(visMinMaxRef.value))
                 var upPos = down.position
                 var upTime = down.uptimeMillis
                 var multi = false
