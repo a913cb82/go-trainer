@@ -135,12 +135,21 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = cur.copy(isThinking = true)
             }
             viewModelScope.launch {
+                if (seq != gameSeq) return@launch
                 try {
                     engine().newGame(cur.rank)
-                    for (m in cur.history) engine().playMove(m.color, m.x, m.y)
+                    // Re-check per move: a new game started mid-replay must
+                    // stop the stale loop before it stamps old stones onto
+                    // the new board (see StaleResyncTest). resyncMoves covers
+                    // stale-at-start; the live check covers mid-loop.
+                    for (m in GameFlow.resyncMoves(cur.history, seq, gameSeq)) {
+                        if (seq != gameSeq) return@launch
+                        engine().playMove(m.color, m.x, m.y)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "engine resync failed", e)
-                    _state.value = _state.value.copy(isThinking = false, error = e.message ?: "Engine error")
+                    if (seq == gameSeq)
+                        _state.value = _state.value.copy(isThinking = false, error = e.message ?: "Engine error")
                     return@launch
                 }
                 if (seq != gameSeq) return@launch

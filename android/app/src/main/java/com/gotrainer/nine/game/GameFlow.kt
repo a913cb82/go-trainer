@@ -36,6 +36,15 @@ object GameFlow {
         toMove != playerColor
 
     /**
+     * History the launch-time resync may replay: all of it when current,
+     * nothing when a new game has since started. A stale replay would
+     * stamp old stones onto the new game's engine board (and its first
+     * colliding `play` throws a user-visible GTP error for a dead game).
+     */
+    fun resyncMoves(history: List<MoveRec>, seq: Int, gameSeq: Int): List<MoveRec> =
+        if (seq != gameSeq) emptyList() else history
+
+    /**
      * Whether the player's just-applied move/pass must raise the thinking
      * bar immediately, before any engine sync: exactly when botReply()
      * follows. Placements and non-finishing passes always do; the second
