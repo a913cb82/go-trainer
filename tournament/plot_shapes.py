@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from tournament import fit, model_select as M, shapes as S, bezier
+from tournament import fit, model_select as M, shapes as S, bezier, smooth
 from tournament.schedule import rung_label
 
 rows = []
@@ -59,6 +59,8 @@ b3 = bezier.bezier_fits(3)(xs, xs_rel)
 bez3 = [b3(x) - b3(16.0) + 1500 for x in xs]
 b6 = bezier.bezier_fits(6)(xs, xs_rel)
 bez6 = [b6(x) - b6(16.0) + 1500 for x in xs]
+sma_raw = smooth.sma(smooth.substitute(xs_rel))
+sma_c = [v - sma_raw[15] + 1500 for v in sma_raw]
 
 labels = [rung_label(i) for i in range(29)]
 xi = list(range(29))
@@ -70,6 +72,7 @@ plt.plot(xi, sig_s, "--", label="sigmoid, 18k skipped")
 plt.plot(xi, fp_s, "-.", label="FP2 %s, 18k skipped" % (best,))
 plt.plot(xi, bez3, ":", lw=2, label="bezier-3 (== cubic)")
 plt.plot(xi, bez6, linestyle=(0, (3, 1, 1, 1)), label="bezier-6")
+plt.plot(xi, sma_c, "-", lw=1.5, label="SMA-3 (18k interpolated)")
 plt.xticks(xi, labels, rotation=45)
 plt.ylabel("WHR (5k = 1500 pin)")
 plt.xlabel("bot rung")
