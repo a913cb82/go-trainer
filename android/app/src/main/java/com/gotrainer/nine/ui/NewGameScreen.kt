@@ -104,7 +104,7 @@ private fun HeadingToggle(options: List<String>, selected: Int, onSelect: (Int) 
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Box(
-                    modifier = Modifier.fillMaxWidth(0.6f).height(2.dp)
+                    modifier = Modifier.fillMaxWidth().height(2.dp)
                         .background(if (sel) primary else Color.Transparent),
                 )
             }
@@ -144,13 +144,21 @@ fun NewGameScreen(
                 },
             )
         },
+        bottomBar = {
+            Button(
+                onClick = onStart,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp),
+            ) {
+                Text("Start game")
+            }
+        },
     ) { inner ->
         Column(
             modifier = Modifier.padding(inner).fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp).padding(bottom = 32.dp),
+                .padding(horizontal = 20.dp).padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Choose your stones", style = MaterialTheme.typography.labelLarge)
+            Text("Choose Your Stones", style = MaterialTheme.typography.titleLarge)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -186,7 +194,7 @@ fun NewGameScreen(
                 Text(s.playerRankText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
 
-            Text("Choose Opponent", style = MaterialTheme.typography.labelLarge)
+            Text("Choose Opponent", style = MaterialTheme.typography.titleLarge)
             HeadingToggle(
                 options = Difficulty.entries.map { it.label() },
                 selected = Difficulty.entries.indexOf(draftDifficulty),
@@ -225,7 +233,7 @@ fun NewGameScreen(
                     steps = 7,
                 )
             }
-            Text("Game Type", style = MaterialTheme.typography.labelLarge)
+            Text("Game Type", style = MaterialTheme.typography.titleLarge)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -243,9 +251,6 @@ fun NewGameScreen(
                 }
             }
 
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
-                Text("Start game")
-            }
         }
     }
 }
