@@ -23,9 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,6 +38,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -295,16 +296,6 @@ fun StatsScreen(
             } else {
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SingleChoiceSegmentedButtonRow {
-                            StatsX.entries.forEachIndexed { i, m ->
-                                SegmentedButton(
-                                    selected = xMode == m,
-                                    onClick = { xMode = m },
-                                    shape = SegmentedButtonDefaults.itemShape(i, StatsX.entries.size),
-                                    label = { Text(if (m == StatsX.GAMES) "Games" else "Time") },
-                                )
-                            }
-                        }
                         if (trajLoading) {
                             Text(
                                 "Updating rating curve…",
@@ -368,7 +359,15 @@ private fun RatingGraph(
     val visRanks = remember(ranks, vis) { ranks.slice(vis) }
     val visUppers = remember(display, vis) { display.slice(vis).map { WhrAnchors.whrToRank(it.whr + it.unc) } }
     val visLowers = remember(display, vis) { display.slice(vis).map { WhrAnchors.whrToRank(it.whr - it.unc) } }
-    val ticks = remember(visRanks) { rankAxisTicks(visRanks.min(), visRanks.max()) }
+    // Y domain freezes while fingers are down (rescaling mid-gesture is
+    // seasickness); it follows the viewport again shortly after release.
+    var yView by remember(history, xMode) { mutableStateOf<Pair<Double, Double>?>(null) }
+    val yViewRef = rememberUpdatedState(yView)
+    val setYViewRef = rememberUpdatedState({ y: Pair<Double, Double>? -> yView = y })
+    val visMinMax = remember(visRanks) { visRanks.min() to visRanks.max() }
+    val visMinMaxRef = rememberUpdatedState(visMinMax)
+    val yMinMax = yView ?: visMinMax
+    val ticks = remember(yMinMax) { rankAxisTicks(yMinMax.first, yMinMax.second) }
     // Games x keeps true game numbers.
     val gameNos = remember(shown) {
         val firstNo = history.size - shownHist.size + 1
@@ -402,18 +401,35 @@ private fun RatingGraph(
     }
     val density = LocalDensity.current
     val leftPx = with(density) { 40.dp.toPx() }
-    val axisStripPx = with(density) { 22.dp.toPx() }
+    // Tall axis strip: tick labels on its top row, the axis unit below —
+    // the whole strip toggles Games/Time, so the unit doubles the hitbox.
+    val axisStripPx = with(density) { 40.dp.toPx() }
     var plotW by remember { mutableStateOf(0f) }
     // Gesture detectors must NOT restart on every viewport change (that
     // amputated each pinch/drag after one step); refs stay fresh instead.
     val viewRef = rememberUpdatedState(view)
     val onViewRef = rememberUpdatedState(onView)
     val onToggleXRef = rememberUpdatedState(onToggleX)
+    val scope = rememberCoroutineScope()
+    val watchdog = remember { mutableStateOf<Job?>(null) }
+    fun poked() {
+        // First event of a gesture freezes y; quiescence releases it.
+        if (yViewRef.value == null) setYViewRef.value(visMinMaxRef.value)
+        watchdog.value?.cancel()
+        watchdog.value = scope.launch {
+            delay(250)
+            setYViewRef.value(null)
+        }
+    }
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)
         .onSizeChanged { plotW = it.width.toFloat() }
         .pointerInput(xMode, axisStripPx) {
             detectTapGestures(
-                onDoubleTap = { onViewRef.value(XView(0f, 1f)) },
+                onDoubleTap = {
+                    watchdog.value?.cancel()
+                    setYViewRef.value(null)
+                    onViewRef.value(XView(0f, 1f))
+                },
                 onTap = { off ->
                     if (off.y >= size.height - axisStripPx) onToggleXRef.value()
                 },
@@ -424,14 +440,16 @@ private fun RatingGraph(
                 val w = plotW - leftPx
                 if (w <= 0f) return@detectTransformGestures
                 val focus = ((centroid.x - leftPx) / w).coerceIn(0f, 1f)
-                // Content follows the fingers: a rightward drag looks older.
+                // Drag tracks 1:1 with the finger: the shift is a fraction
+                // of the CURRENT span, not the full range. The zoom focus
+                // point stays put by construction (see XView.zoomed).
                 val v = viewRef.value
-                onViewRef.value(v.zoomed(focus, zoom).panned(-pan.x / w))
+                onViewRef.value(v.zoomed(focus, zoom).panned(-pan.x / w * v.span))
             }
         }
     ) {
         val left = 40.dp.toPx()
-        val bottom = 22.dp.toPx()
+        val bottom = 40.dp.toPx()
         val w = size.width - left
         val h = size.height - bottom
         val lo = ticks.first().toFloat()
@@ -507,5 +525,11 @@ private fun RatingGraph(
             if (claim(cx, layout.size.width.toFloat()))
                 drawText(layout, onSurface, topLeft = Offset(cx - layout.size.width / 2f, h + 4.dp.toPx()))
         }
+        // Axis unit, own row under the ticks: the toggle's visible face.
+        val unit = textMeasurer.measure(if (xMode == StatsX.GAMES) "Games" else "Time", labelStyle)
+        drawText(
+            unit, onSurface,
+            topLeft = Offset(size.width - unit.size.width.toFloat(), h + 20.dp.toPx()),
+        )
     }
 }
