@@ -10,6 +10,7 @@ fitted neighbours alone (itself unseen, same as every other family).
 import unittest
 
 from tournament import smooth
+from tournament.smooth import BANDS
 
 
 class SmaTest(unittest.TestCase):
@@ -38,6 +39,27 @@ class SmaTest(unittest.TestCase):
                     xs, ys)
         # straight line: SMA tracks well, in the same ballpark as linear
         self.assertLess(s["sma"], 4 * s["linear"] + 1.0)
+
+    def test_bands_cover_all_rungs_once(self):
+        covered = [i for lo, hi in BANDS for i in range(lo, hi + 1)]
+        self.assertEqual(sorted(covered), list(range(29)))
+
+    def test_seg3_recovers_line_per_band(self):
+        from tournament import model_select as M
+        xs = [float(i + 1) for i in range(29)]
+        ys = [2.0 * x - 7.0 for x in xs]
+        pred = smooth.seg3_fits(xs, ys)
+        for x in (1.0, 9.0, 15.0, 29.0):
+            self.assertAlmostEqual(pred(x), 2.0 * x - 7.0, places=6)
+
+    def test_seg3_follows_band_levels(self):
+        # flat bottom, steep top: segments must differ, joints may jump
+        ys = [0.0] * 10 + [100.0 + 5.0 * i for i in range(10, 20)] \
+            + [200.0 + 8.0 * i for i in range(20, 29)]
+        xs = [float(i + 1) for i in range(29)]
+        pred = smooth.seg3_fits(xs, ys)
+        self.assertAlmostEqual(pred(1.0), 0.0, places=6)
+        self.assertGreater(pred(25.0) - pred(21.0), 20.0)
 
 
 if __name__ == "__main__":
