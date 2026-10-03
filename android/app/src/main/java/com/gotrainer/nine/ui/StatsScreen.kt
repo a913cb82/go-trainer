@@ -210,6 +210,12 @@ internal fun yRescaleWanted(frozen: Pair<Double, Double>, vis: Pair<Double, Doub
     return (vhi - vlo) < span * Y_SHRINK_FRAC
 }
 
+/** Furniture (gridline + label) shows only for ticks inside the map domain.
+ * Coercing out-of-range ticks onto the border lines stacks their labels
+ * (9k over 10k in a zoomed view); the data keeps its coercion + clip. */
+internal fun yTickVisible(t: Int, lo: Float, hi: Float): Boolean =
+    t.toFloat() >= lo - 1e-6f && t.toFloat() <= hi + 1e-6f
+
 /**
  * Padded raw domain around the visible range: the tween's landing. Raw,
  * not tick-snapped: rankAxisTicks re-expands its input by design, so
@@ -610,12 +616,15 @@ private fun RatingGraph(
         fun yRaw(rank: Double): Float = h - ((rank - lo) / (hi - lo)).toFloat() * h
         fun yOf(rank: Double): Float = yRaw(rank.coerceIn(lo.toDouble(), hi.toDouble()))
         fun xOf(t: Float): Float = left + t * w
-        // Y ticks (axis furniture draws unclipped).
+        // Y ticks (axis furniture draws unclipped). Out-of-range ticks drop:
+        // the data mapping is raw, so edge ticks would stack on the borders.
         for (t in ticks) {
+            if (!yTickVisible(t, lo, hi)) continue
             val y = yOf(t.toDouble())
             drawLine(onSurface.copy(alpha = 0.25f), Offset(left, y), Offset(left + w, y), strokeWidth = 1f)
             val layout = textMeasurer.measure(BotRatings.rankLabel(t.toDouble()), labelStyle)
-            drawText(layout, onSurface, topLeft = Offset(0f, y - layout.size.height / 2f))
+            val ly = (y - layout.size.height / 2f).coerceIn(0f, h - layout.size.height)
+            drawText(layout, onSurface, topLeft = Offset(0f, ly))
         }
         // Band, trajectory and dots, hard-clipped to the plot: zoomed edge
         // neighbors live outside 0..1 and must not paint over the axes.

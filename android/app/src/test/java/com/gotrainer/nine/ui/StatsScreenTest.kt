@@ -192,6 +192,19 @@ class StatsScreenTest {
         assertTrue("headroom", (hi - lo) > (13.8 - 10.2))
     }
 
+    @Test fun `furniture keeps in-range ticks`() {
+        assertTrue(yTickVisible(10, 9.5f, 12.5f))
+        assertFalse(yTickVisible(9, 9.5f, 12.5f))
+    }
+
+    @Test fun `furniture drops ticks outside the map domain`() {
+        // Zoomed landing: ticks 9 and 10 below a (10.5, 11.5) map used to
+        // coerce onto the top edge and superimpose (user screenshot).
+        assertFalse(yTickVisible(9, 10.5f, 11.5f))
+        assertFalse(yTickVisible(10, 10.5f, 11.5f))
+        assertFalse(yTickVisible(12, 10.5f, 11.5f))
+    }
+
     @Test fun `visible range keeps edge neighbors for line continuity`() {
         val ts = listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
         assertEquals(0..4, visibleRange(5, ts, XView(0f, 1f)))
