@@ -1,5 +1,11 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Axis gestures merged + installed (2026-10-03, `stats-axis` -> main)
+
+1:1 drag (span-fraction fix), y frozen during gestures, presets gone,
+axis unit label with a taller tap strip. Installed over WiFi adb, launches
+clean (empty board, 14k). Thumb test pending.
+
 ## Gesture fix merged + installed (2026-10-03, `stats-gestures` -> main)
 
 Root cause of the one-step gestures found on PC: the detectors were keyed
