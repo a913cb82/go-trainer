@@ -10,3 +10,6 @@ server/analysis_logs/
 analysis_logs/
 server/katago
 server/libs/
+
+# Bot-tournament scratch (tournament branch only): raw SGFs, engine logs.
+tournament/runs/
