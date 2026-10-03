@@ -32,10 +32,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -163,7 +161,8 @@ internal fun timeXTicks(firstTs: Long, lastTs: Long): List<Long> {
 /** Day/month in British order (3/10), regardless of device locale. */
 internal fun dayMonthFormat(): SimpleDateFormat = SimpleDateFormat("d/M", Locale.UK)
 
-/** Fractional x-viewport over the shown slice (0..1 of the window). */
+/** Fractional x-viewport over the full history (0..1 of the slice). Gestures
+ * wander it; axis switches and new games reset it to full. */
 internal data class XView(val start: Float, val end: Float) {
     val span: Float get() = end - start
     val isFull: Boolean get() = start <= 0f && end >= 1f
@@ -206,14 +205,6 @@ internal fun gamesXValues(gameNos: List<Int>, historySize: Int, full: Boolean): 
 
 private enum class StatsX { GAMES, TIME }
 
-/** Graph window: how many recent games to show. */
-private enum class StatsWindow(val size: Int, val label: String) {
-    W10(10, "10"),
-    W100(100, "100"),
-    W1000(1000, "1000"),
-    ALL(Int.MAX_VALUE, "All"),
-}
-
 /**
  * Rating history: current rank, record, and a rank-over-time graph with the
  * uncertainty band. Pure content (history in, pixels out) for screenshots.
@@ -230,10 +221,8 @@ fun StatsScreen(
     initialXView: ClosedFloatingPointRange<Float>? = null,
 ) {
     var xMode by remember { mutableStateOf(StatsX.GAMES) }
-    var window by remember { mutableStateOf(StatsWindow.ALL) }
-    // Pan/zoom viewport over the window slice; presets and axis switches
-    // reset it, gestures wander it (and unselect the preset row).
-    var xview by remember(history, xMode, window) {
+    // Pan/zoom viewport over the full history; axis switches reset it.
+    var xview by remember(history, xMode) {
         mutableStateOf(initialXView?.let { XView(it.start, it.endInclusive) } ?: XView(0f, 1f))
     }
     var confirmReset by remember { mutableStateOf(false) }
@@ -316,16 +305,6 @@ fun StatsScreen(
                                 )
                             }
                         }
-                        SingleChoiceSegmentedButtonRow {
-                            StatsWindow.entries.forEachIndexed { i, wsel ->
-                                SegmentedButton(
-                                    selected = window == wsel && xview.isFull,
-                                    onClick = { window = wsel },
-                                    shape = SegmentedButtonDefaults.itemShape(i, StatsWindow.entries.size),
-                                    label = { Text(wsel.label) },
-                                )
-                            }
-                        }
                         if (trajLoading) {
                             Text(
                                 "Updating rating curve…",
@@ -334,14 +313,9 @@ fun StatsScreen(
                             )
                         } else {
                             RatingGraph(
-                                history = history, traj = traj, xMode = xMode, window = window,
+                                history = history, traj = traj, xMode = xMode,
                                 view = xview, onView = { xview = it },
                                 onToggleX = { xMode = if (xMode == StatsX.GAMES) StatsX.TIME else StatsX.GAMES },
-                            )
-                            Text(
-                                "Drag to scroll · pinch to zoom · tap the axis to switch · double-tap to reset",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -356,7 +330,6 @@ private fun RatingGraph(
     history: List<RatedGame>,
     traj: List<Whr.Rating>,
     xMode: StatsX,
-    window: StatsWindow,
     view: XView,
     onView: (XView) -> Unit,
     onToggleX: () -> Unit,
@@ -366,12 +339,12 @@ private fun RatingGraph(
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = onSurface)
     val dateFmt = remember { dayMonthFormat() }
-    // Window slices the newest games; game 0 (the 20k start dot) joins only
-    // when the window covers the whole history. The y axis fits rating
-    // points only — the band may run off the chart, and yOf clips it.
-    val shown = remember(history, traj, window) {
-        val n = minOf(window.size, history.size)
-        Triple(history.takeLast(n), traj.takeLast(n), n == history.size)
+    // The graph always covers the full history; game 0 (the 20k start dot)
+    // joins it. Pan/zoom moves the viewport, never the slice. The y axis
+    // fits rating points only — the band may run off the chart, and yOf
+    // clips it.
+    val shown = remember(history, traj) {
+        Triple(history, traj, true)
     }
     val shownHist = shown.first
     val display = remember(shown) { (if (shown.third) listOf(PlayerWhr.rate(emptyList())) else emptyList()) + shown.second }
@@ -396,7 +369,7 @@ private fun RatingGraph(
     val visUppers = remember(display, vis) { display.slice(vis).map { WhrAnchors.whrToRank(it.whr + it.unc) } }
     val visLowers = remember(display, vis) { display.slice(vis).map { WhrAnchors.whrToRank(it.whr - it.unc) } }
     val ticks = remember(visRanks) { rankAxisTicks(visRanks.min(), visRanks.max()) }
-    // Games x keeps true game numbers so a window sits at history's right end.
+    // Games x keeps true game numbers.
     val gameNos = remember(shown) {
         val firstNo = history.size - shownHist.size + 1
         (if (shown.third) listOf(0) else emptyList()) + (firstNo..history.size).toList()
@@ -431,21 +404,29 @@ private fun RatingGraph(
     val leftPx = with(density) { 40.dp.toPx() }
     val axisStripPx = with(density) { 22.dp.toPx() }
     var plotW by remember { mutableStateOf(0f) }
+    // Gesture detectors must NOT restart on every viewport change (that
+    // amputated each pinch/drag after one step); refs stay fresh instead.
+    val viewRef = rememberUpdatedState(view)
+    val onViewRef = rememberUpdatedState(onView)
+    val onToggleXRef = rememberUpdatedState(onToggleX)
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)
         .onSizeChanged { plotW = it.width.toFloat() }
-        .pointerInput(view, xMode) {
+        .pointerInput(xMode, axisStripPx) {
             detectTapGestures(
-                onDoubleTap = { onView(XView(0f, 1f)) },
-                onTap = { off -> if (off.y >= size.height - axisStripPx) onToggleX() },
+                onDoubleTap = { onViewRef.value(XView(0f, 1f)) },
+                onTap = { off ->
+                    if (off.y >= size.height - axisStripPx) onToggleXRef.value()
+                },
             )
         }
-        .pointerInput(view, xMode) {
+        .pointerInput(xMode, axisStripPx, leftPx, plotW) {
             detectTransformGestures { centroid, pan, zoom, _ ->
                 val w = plotW - leftPx
                 if (w <= 0f) return@detectTransformGestures
                 val focus = ((centroid.x - leftPx) / w).coerceIn(0f, 1f)
                 // Content follows the fingers: a rightward drag looks older.
-                onView(view.zoomed(focus, zoom).panned(-pan.x / w))
+                val v = viewRef.value
+                onViewRef.value(v.zoomed(focus, zoom).panned(-pan.x / w))
             }
         }
     ) {
@@ -458,8 +439,15 @@ private fun RatingGraph(
         fun yRaw(rank: Double): Float = h - ((rank - lo) / (hi - lo)).toFloat() * h
         fun yOf(rank: Double): Float = yRaw(rank.coerceIn(lo.toDouble(), hi.toDouble()))
         fun xOf(t: Float): Float = left + t * w
-        // Uncertainty band, hard-clipped to the plot: variance never moves
-        // the axis, it just runs off the edge where it exceeds it.
+        // Y ticks (axis furniture draws unclipped).
+        for (t in ticks) {
+            val y = yOf(t.toDouble())
+            drawLine(onSurface.copy(alpha = 0.25f), Offset(left, y), Offset(left + w, y), strokeWidth = 1f)
+            val layout = textMeasurer.measure(BotRatings.rankLabel(t.toDouble()), labelStyle)
+            drawText(layout, onSurface, topLeft = Offset(0f, y - layout.size.height / 2f))
+        }
+        // Band, trajectory and dots, hard-clipped to the plot: zoomed edge
+        // neighbors live outside 0..1 and must not paint over the axes.
         clipRect(left, 0f, left + w, h) {
             val band = Path().apply {
                 visUppers.forEachIndexed { i, u ->
@@ -470,28 +458,20 @@ private fun RatingGraph(
                 close()
             }
             drawPath(band, accent.copy(alpha = 0.15f))
-        }
-        // Y ticks.
-        for (t in ticks) {
-            val y = yOf(t.toDouble())
-            drawLine(onSurface.copy(alpha = 0.25f), Offset(left, y), Offset(left + w, y), strokeWidth = 1f)
-            val layout = textMeasurer.measure(BotRatings.rankLabel(t.toDouble()), labelStyle)
-            drawText(layout, onSurface, topLeft = Offset(0f, y - layout.size.height / 2f))
-        }
-        // Trajectory.
-        val pts = visRanks.mapIndexed { i, r -> Offset(xOf(xp(fullT[vis.first + i])), yOf(r)) }
-        for (i in 0 until pts.size - 1) drawLine(accent, pts[i], pts[i + 1], strokeWidth = 4f)
-        pts.forEachIndexed { i, p ->
-            // Full history: point 0 is the unplayed start, a neutral dot.
-            // A window holds played games only, so every dot is win/loss.
-            val di = vis.first + i
-            if (shown.third && di == 0) drawCircle(accent, radius = 6f, center = p)
-            else {
-                val game = shownHist[di - off]
-                drawCircle(
-                    if (game.score == 1.0) Color(0xFF27864A) else Color(0xFFC0392B),
-                    radius = 6f, center = p,
-                )
+            val pts = visRanks.mapIndexed { i, r -> Offset(xOf(xp(fullT[vis.first + i])), yOf(r)) }
+            for (i in 0 until pts.size - 1) drawLine(accent, pts[i], pts[i + 1], strokeWidth = 4f)
+            pts.forEachIndexed { i, p ->
+                // Point 0 is the unplayed start, a neutral dot; every game
+                // dot is win/loss.
+                val di = vis.first + i
+                if (shown.third && di == 0) drawCircle(accent, radius = 6f, center = p)
+                else {
+                    val game = shownHist[di - off]
+                    drawCircle(
+                        if (game.score == 1.0) Color(0xFF27864A) else Color(0xFFC0392B),
+                        radius = 6f, center = p,
+                    )
+                }
             }
         }
         // X gridlines, fainter than the rank lines; labels yield to the
@@ -501,7 +481,7 @@ private fun RatingGraph(
             val x = xOf(t)
             drawLine(gridColor, Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
         }
-        // X endpoints: true game numbers (a window starts mid-history).
+        // X endpoints: first/last visible (true game numbers, or dates).
         val xLabel = { di: Int ->
             if (xMode == StatsX.GAMES) "${gameNos[di]}"
             // The start dot predates game 1, so it borrows its date.
