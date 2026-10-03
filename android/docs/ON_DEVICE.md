@@ -1,5 +1,9 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Start button nav inset merged + installed (2026-10-03, `start-inset` -> main)
+
+bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
+
 ## Shared stones + uniform rims merged + installed (2026-10-03, `stone-graphics`+`stone-rims` -> main)
 
 One drawGoStone for chooser/board/animations. Black rim white, white rim
