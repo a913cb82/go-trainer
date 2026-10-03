@@ -1,5 +1,10 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Y-freeze fix merged + installed (2026-10-03, `stats-yfreeze` -> main)
+
+The freezer was dead code (never called). Press-tracked freeze/release now.
+Installed over WiFi adb, launches clean (empty board, 14k). Thumb test pending.
+
 ## Axis gestures merged + installed (2026-10-03, `stats-axis` -> main)
 
 1:1 drag (span-fraction fix), y frozen during gestures, presets gone,
