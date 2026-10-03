@@ -94,4 +94,5 @@ object WhrAnchors {
     /** WHR rank deviation: how many ranks the uncertainty spans upward. */
     fun whrRankDeviation(whr: Double, unc: Double): Double =
         whrToRank(whr + unc) - whrToRank(whr)
+}
 

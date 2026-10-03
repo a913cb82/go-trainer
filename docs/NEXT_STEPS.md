@@ -1,13 +1,5 @@
 # Next steps
 
-## Immediate
-
-- Run `./gradlew :app:testDebugUnitTest`. The WHR migration and the resync
-  thinking fix were verified by mirroring every assertion in Python (the
-  solver cross-checked against direct matrix inversion to 1e-13), but gradle
-  has not run: no JVM toolchain existed in that container. JVM means Java
-  Virtual Machine, the runtime that builds and tests Kotlin code.
-
 ## WHR follow-ups (in order)
 
 1. **Bot-vs-bot anchor refit.** Adjacent-rung self-play gives direct gap

@@ -11,7 +11,22 @@ Eigen is the math library that runs the neural nets on the phone CPU. A
 visit is one simulated continuation of a game. NPU means the phone's AI
 accelerator chip. SNPE is Qualcomm's toolkit for it.
 
-## Current state (2026-09-20)
+## Current state (2026-10-03)
+
+- Update shipped over WiFi adb (`192.168.0.5:5555`, `5s` push at `12.8 MB/s`).
+  USB bulk wedged at `3.5M` of `80M` (shell stayed alive); rebind did not
+  help. `adb tcpip 5555` plus `adb connect` bypassed it. Lesson: sick usbip
+  channel, not slow link.
+- Build needs Java 21 (`~/java21`, Temurin `21.0.12.1`). System Java is 17;
+  Paparazzi `2.0.0-alpha05` refuses 17. `local.properties` was missing and
+  was recreated (`sdk.dir=/home/acbraith/Android/Sdk`).
+- WHR commit failed `compileDebugKotlin` (`WhrAnchors` missing `}`); fixed.
+  `:app:testDebugUnitTest` then `assembleDebug` both green.
+- Installed `versionCode=1791020091` (`2026-10-03 10:37:31`, was `1790802817`
+  from `2026-09-30`). Launch resumes mid-game (White to play, 30k) with
+  engine warmup genmove `536ms`. No crash.
+
+## Prior state (2026-09-20)
 
 The engine works on the device. It is a vendored KataGo binary (BadukAI
 v1.20.13's copy, KataGo v1.16.0, has `humanSLProfile`), loaded through the
