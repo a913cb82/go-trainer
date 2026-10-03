@@ -1,6 +1,8 @@
 package com.gotrainer.nine.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -38,9 +39,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -410,23 +408,26 @@ private fun RatingGraph(
     val viewRef = rememberUpdatedState(view)
     val onViewRef = rememberUpdatedState(onView)
     val onToggleXRef = rememberUpdatedState(onToggleX)
-    val scope = rememberCoroutineScope()
-    val watchdog = remember { mutableStateOf<Job?>(null) }
-    fun poked() {
-        // First event of a gesture freezes y; quiescence releases it.
-        if (yViewRef.value == null) setYViewRef.value(visMinMaxRef.value)
-        watchdog.value?.cancel()
-        watchdog.value = scope.launch {
-            delay(250)
-            setYViewRef.value(null)
-        }
-    }
+    // Y freezes on first finger down and releases on last finger up.
+    // A press-tracking loop owns that truth; the transform loop below only
+    // moves the viewport. (The first attempt never even called its freezer —
+    // and a quiescence timer would leak on held-still pinches anyway.)
+    // Neither loop consumes, so both observe the same stream.
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)
         .onSizeChanged { plotW = it.width.toFloat() }
+        .pointerInput(xMode) {
+            awaitEachGesture {
+                awaitFirstDown()
+                if (yViewRef.value == null) setYViewRef.value(visMinMaxRef.value)
+                do {
+                    val event = awaitPointerEvent()
+                } while (event.changes.any { it.pressed })
+                setYViewRef.value(null)
+            }
+        }
         .pointerInput(xMode, axisStripPx) {
             detectTapGestures(
                 onDoubleTap = {
-                    watchdog.value?.cancel()
                     setYViewRef.value(null)
                     onViewRef.value(XView(0f, 1f))
                 },
