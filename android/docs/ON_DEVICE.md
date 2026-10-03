@@ -4,6 +4,12 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## White-rim restoration merged + installed (2026-10-03, `stone-rimfix` -> main)
+
+White is -1, not 2: the brown rim was missing everywhere. Pixel-verified
+against pre-stone goldens. Installed over WiFi adb, launches clean onto
+the finished Black +31.5 board.
+
 ## Chooser-only rims merged + installed (2026-10-03, `stone-chooseron` -> main)
 
 Board back to legacy rims. Installed over WiFi adb, launches clean onto
