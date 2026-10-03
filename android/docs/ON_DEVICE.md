@@ -1,5 +1,12 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Stats gestures merged + installed (2026-10-03, `stats-zoom` -> main)
+
+Merged `0e53f21` to main, `installDebug` over WiFi adb clean, app launches
+with no crash (empty board, restored 14k rank). Stats graph now pans/zooms
+with y auto-scale; tap-axis toggle + double-tap reset untested by fingers —
+needs a device pass.
+
 ## Free-play-only cut (2026-10-03, `free-play-only` branch)
 
 Multiple-choice mode removed from the shipped app: no candidate queries
