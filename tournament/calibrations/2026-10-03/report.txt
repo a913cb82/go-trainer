@@ -26,3 +26,39 @@ disputed adjacent pairs (wave-two candidates): 23
   7d-8d P(genuine)=0.462
   8d-9d P(genuine)=0.398
 loosest rungs: 8d(±93), 9d(±92), 7d(±90), 6d(±88), 5d(±86)
+
+================================================================
+WAVE TWO + SHAPE SHOOTOUT + FINAL DECISION (2026-10-03, later)
+================================================================
+Wave two: 23 pairings x 2 colors x 10 = 460 games, seed 20261005...20261004,
+wall 1280s (21.6/min), 0 quarantined. runs/verify18k: pairs (1,2),(2,3)
+x 5 = 20 games, seed 20261005 (third replication of the 18k question).
+
+Pooled dataset: 2280 games (wave1 1820 + wave2 460).
+- Global linear slope 38.25; kyu/dan split 38.0/39.0 (BIC worse +8);
+  quadratic bow +0.40 (BIC worse +2). Curvature unproven: line stands.
+- 18k anomaly replicates: (1,2) 14/20+14/20+5/10 = 33/50; (2,3)
+  8/20+5/20+7/10 = 20/50... (2,3) pooled 13/40 over waves 1+2 (3 sigma).
+  Fresh 20 games came in under the +115 bump prediction (12/20 vs ~15/20
+  expected): evidence sits between line and bump. Shrinkage candidate +55
+  discussed; DECISION: ship pure FP2-smoothed value at 18k (1040), i.e.
+  accept the shape, no local exception. Next calibration must retest 18k.
+- Shape shootout (nested LOOCV over rung values, selection inside folds;
+  game-level BIC on 2280 rows):
+    FP2(3,3) 933 | isotonic 974 | sigmoid 1007 | SMA-3 1080 | bezier-6 1121
+    | cubic == bezier-3 1322 | broken-stick 2415 | linear 4386
+    | cbrt 24119 (backwards bend, dead)
+  Game BIC: sigmoid+bump 2670 | lin+bump 2673 | sigmoid 2674 |
+  linear 2680 | free 2836. FP2 stable (3,3) in all 29 folds.
+- 3-band linear: 20k-11k 24/rung, 10k-1k 54/rung, 1d-9d 30/rung:
+  flat-steep-flat, the sigmoid silhouette from straight lines.
+- FINAL TABLE (table.json): FP2(3,3) fit on 2120 games (all rung-2 games
+  excluded), evaluated at all 29 rungs incl. 18k = 1039.78, 5k = 1500 pin.
+  Landed on main as WhrAnchors + CURVE_VERSION 3.
+- Old app table (OGS-widened) vs measured: mid-ladder agreed (~30);
+  top overstated by +150..+524 (9d 2644 vs 2066); bottom understated by
+  -100..-320 (20k 776 vs 1032). Span 1868 -> ~1034: half the old spread
+  was model fiction at the ends.
+Evidence in this repo: runs/{wave1,wave2,verify18k}/{games.jsonl,
+manifest.json,gtp.cfg,*.sgf} (2300 games). KataGo GTP logs (~133M)
+retained locally only; reproducible from gtp.cfg + manifest seeds.
