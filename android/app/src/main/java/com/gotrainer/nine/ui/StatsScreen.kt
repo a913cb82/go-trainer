@@ -1,6 +1,8 @@
 package com.gotrainer.nine.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,9 +32,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -155,6 +163,39 @@ internal fun timeXTicks(firstTs: Long, lastTs: Long): List<Long> {
 /** Day/month in British order (3/10), regardless of device locale. */
 internal fun dayMonthFormat(): SimpleDateFormat = SimpleDateFormat("d/M", Locale.UK)
 
+/** Fractional x-viewport over the shown slice (0..1 of the window). */
+internal data class XView(val start: Float, val end: Float) {
+    val span: Float get() = end - start
+    val isFull: Boolean get() = start <= 0f && end >= 1f
+}
+
+internal const val MIN_VIEW_SPAN = 0.02f
+
+/** Drag: shift by a plot fraction, clamped so the span never leaves 0..1. */
+internal fun XView.panned(dFrac: Float): XView {
+    val ns = (start + dFrac).coerceIn(0f, 1f - span)
+    return XView(ns, ns + span)
+}
+
+/**
+ * Pinch: rescale around the focus plot fraction (which stays put),
+ * clamped to [MIN_VIEW_SPAN, full].
+ */
+internal fun XView.zoomed(focus: Float, factor: Float): XView {
+    val f = focus.coerceIn(0f, 1f)
+    val s = (span / factor).coerceIn(MIN_VIEW_SPAN, 1f)
+    val ns = (start + f * span - f * s).coerceIn(0f, 1f - s)
+    return XView(ns, ns + s)
+}
+
+/** Display indices to draw: in-view points plus edge neighbors (clipRect cuts the lines). */
+internal fun visibleRange(n: Int, ts: List<Float>, view: XView): IntRange {
+    if (n == 0) return 0..-1
+    val lo = ts.indexOfFirst { it >= view.start }.takeIf { it >= 0 } ?: (n - 1)
+    val hi = ts.indexOfLast { it <= view.end }.takeIf { it >= 0 } ?: 0
+    return maxOf(0, lo - 1)..minOf(n - 1, hi + 1)
+}
+
 internal fun gamesXValues(gameNos: List<Int>, historySize: Int, full: Boolean): List<Float> =
     if (full) gameNos.map { it.toFloat() / historySize }
     else {
@@ -186,9 +227,15 @@ fun StatsScreen(
     playerRankText: String,
     onBack: () -> Unit,
     onReset: () -> Unit,
+    initialXView: ClosedFloatingPointRange<Float>? = null,
 ) {
     var xMode by remember { mutableStateOf(StatsX.GAMES) }
     var window by remember { mutableStateOf(StatsWindow.ALL) }
+    // Pan/zoom viewport over the window slice; presets and axis switches
+    // reset it, gestures wander it (and unselect the preset row).
+    var xview by remember(history, xMode, window) {
+        mutableStateOf(initialXView?.let { XView(it.start, it.endInclusive) } ?: XView(0f, 1f))
+    }
     var confirmReset by remember { mutableStateOf(false) }
     val rating = PlayerWhr.rate(history)
     // traj is the cached causal curve (Stats backfills gaps off-thread;
@@ -272,7 +319,7 @@ fun StatsScreen(
                         SingleChoiceSegmentedButtonRow {
                             StatsWindow.entries.forEachIndexed { i, wsel ->
                                 SegmentedButton(
-                                    selected = window == wsel,
+                                    selected = window == wsel && xview.isFull,
                                     onClick = { window = wsel },
                                     shape = SegmentedButtonDefaults.itemShape(i, StatsWindow.entries.size),
                                     label = { Text(wsel.label) },
@@ -286,7 +333,16 @@ fun StatsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            RatingGraph(history = history, traj = traj, xMode = xMode, window = window)
+                            RatingGraph(
+                                history = history, traj = traj, xMode = xMode, window = window,
+                                view = xview, onView = { xview = it },
+                                onToggleX = { xMode = if (xMode == StatsX.GAMES) StatsX.TIME else StatsX.GAMES },
+                            )
+                            Text(
+                                "Drag to scroll · pinch to zoom · tap the axis to switch · double-tap to reset",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -301,6 +357,9 @@ private fun RatingGraph(
     traj: List<Whr.Rating>,
     xMode: StatsX,
     window: StatsWindow,
+    view: XView,
+    onView: (XView) -> Unit,
+    onToggleX: () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
@@ -316,17 +375,11 @@ private fun RatingGraph(
     }
     val shownHist = shown.first
     val display = remember(shown) { (if (shown.third) listOf(PlayerWhr.rate(emptyList())) else emptyList()) + shown.second }
-    val ranks = display.map { WhrAnchors.whrToRank(it.whr) }
-    val uppers = display.map { WhrAnchors.whrToRank(it.whr + it.unc) }
-    val lowers = display.map { WhrAnchors.whrToRank(it.whr - it.unc) }
-    val ticks = remember(ranks) { rankAxisTicks(ranks.min(), ranks.max()) }
-    // Games x keeps true game numbers so a window sits at history's right end.
-    val gameNos = remember(shown) {
-        val firstNo = history.size - shownHist.size + 1
-        (if (shown.third) listOf(0) else emptyList()) + (firstNo..history.size).toList()
-    }
-    val xVals: List<Float> = remember(shown, xMode) {
+    // Full-slice normalization (0..1); the viewport picks a sub-range.
+    val fullT: List<Float> = remember(shown, xMode) {
         if (xMode == StatsX.GAMES) {
+            val firstNo = history.size - shownHist.size + 1
+            val gameNos = (if (shown.third) listOf(0) else emptyList()) + (firstNo..history.size).toList()
             gamesXValues(gameNos, history.size, shown.third)
         } else {
             val t0 = shownHist.first().ts.toDouble()
@@ -335,26 +388,67 @@ private fun RatingGraph(
             else shownHist.map { ((it.ts - t0) / span).toFloat() }
         }
     }
+    // Visible display indices (+ edge neighbors); everything below draws these.
+    val vis = remember(fullT, view) { visibleRange(display.size, fullT, view) }
+    val off = if (shown.third) 1 else 0
+    val ranks = display.map { WhrAnchors.whrToRank(it.whr) }
+    val visRanks = remember(ranks, vis) { ranks.slice(vis) }
+    val visUppers = remember(display, vis) { display.slice(vis).map { WhrAnchors.whrToRank(it.whr + it.unc) } }
+    val visLowers = remember(display, vis) { display.slice(vis).map { WhrAnchors.whrToRank(it.whr - it.unc) } }
+    val ticks = remember(visRanks) { rankAxisTicks(visRanks.min(), visRanks.max()) }
+    // Games x keeps true game numbers so a window sits at history's right end.
+    val gameNos = remember(shown) {
+        val firstNo = history.size - shownHist.size + 1
+        (if (shown.third) listOf(0) else emptyList()) + (firstNo..history.size).toList()
+    }
+    val span = (view.span.takeIf { it > 0 } ?: 1f)
+    fun xp(t: Float): Float = (t - view.start) / span
     // X gridline ticks as (position, label): round game numbers in Games
-    // mode (same normalization as the dots), calendar boundaries in Time.
-    val xTickTs: List<Pair<Float, String>> = remember(shown, xMode) {
+    // mode, calendar boundaries in Time. Ticks outside the viewport drop.
+    val xTickTs: List<Pair<Float, String>> = remember(shown, xMode, vis) {
         if (xMode == StatsX.GAMES) {
-            val first = gameNos.first()
-            val span = (gameNos.size - 1).takeIf { it > 0 } ?: 1
-            gamesXTicks(first, gameNos.last()).map { g ->
-                val t = if (shown.third) g.toFloat() / history.size
-                else (g - first).toFloat() / span
-                t to "$g"
+            val visNos = gameNos.slice(vis)
+            gamesXTicks(visNos.first(), visNos.last()).mapNotNull { g ->
+                val idx = gameNos.indexOf(g).takeIf { it >= 0 } ?: return@mapNotNull null
+                val t = xp(fullT[idx])
+                if (t in 0f..1f) t to "$g" else null
             }
         } else {
-            val t0 = shownHist.first().ts.toDouble()
-            val span = (shownHist.last().ts - shownHist.first().ts).toDouble().takeIf { it > 0 } ?: 1.0
-            timeXTicks(shownHist.first().ts, shownHist.last().ts).map { ts ->
-                ((ts - t0) / span).toFloat() to dateFmt.format(Date(ts))
+            val gLo = maxOf(vis.first - off, 0)
+            val gHi = minOf(vis.last - off, shownHist.size - 1)
+            if (gLo > gHi) emptyList()
+            else {
+                val t0 = shownHist.first().ts.toDouble()
+                val tspan = (shownHist.last().ts - shownHist.first().ts).toDouble().takeIf { it > 0 } ?: 1.0
+                timeXTicks(shownHist[gLo].ts, shownHist[gHi].ts).mapNotNull { ts ->
+                    val t = xp(((ts - t0) / tspan).toFloat())
+                    if (t in 0f..1f) t to dateFmt.format(Date(ts)) else null
+                }
             }
         }
     }
-    Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+    val density = LocalDensity.current
+    val leftPx = with(density) { 40.dp.toPx() }
+    val axisStripPx = with(density) { 22.dp.toPx() }
+    var plotW by remember { mutableStateOf(0f) }
+    Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)
+        .onSizeChanged { plotW = it.width.toFloat() }
+        .pointerInput(view, xMode) {
+            detectTapGestures(
+                onDoubleTap = { onView(XView(0f, 1f)) },
+                onTap = { off -> if (off.y >= size.height - axisStripPx) onToggleX() },
+            )
+        }
+        .pointerInput(view, xMode) {
+            detectTransformGestures { centroid, pan, zoom, _ ->
+                val w = plotW - leftPx
+                if (w <= 0f) return@detectTransformGestures
+                val focus = ((centroid.x - leftPx) / w).coerceIn(0f, 1f)
+                // Content follows the fingers: a rightward drag looks older.
+                onView(view.zoomed(focus, zoom).panned(-pan.x / w))
+            }
+        }
+    ) {
         val left = 40.dp.toPx()
         val bottom = 22.dp.toPx()
         val w = size.width - left
@@ -368,11 +462,11 @@ private fun RatingGraph(
         // the axis, it just runs off the edge where it exceeds it.
         clipRect(left, 0f, left + w, h) {
             val band = Path().apply {
-                uppers.forEachIndexed { i, u ->
-                    val x = xOf(xVals[i]); val y = yRaw(u)
+                visUppers.forEachIndexed { i, u ->
+                    val x = xOf(xp(fullT[vis.first + i])); val y = yRaw(u)
                     if (i == 0) moveTo(x, y) else lineTo(x, y)
                 }
-                for (i in lowers.indices.reversed()) lineTo(xOf(xVals[i]), yRaw(lowers[i]))
+                for (i in visLowers.indices.reversed()) lineTo(xOf(xp(fullT[vis.first + i])), yRaw(visLowers[i]))
                 close()
             }
             drawPath(band, accent.copy(alpha = 0.15f))
@@ -385,14 +479,15 @@ private fun RatingGraph(
             drawText(layout, onSurface, topLeft = Offset(0f, y - layout.size.height / 2f))
         }
         // Trajectory.
-        val pts = ranks.mapIndexed { i, r -> Offset(xOf(xVals[i]), yOf(r)) }
+        val pts = visRanks.mapIndexed { i, r -> Offset(xOf(xp(fullT[vis.first + i])), yOf(r)) }
         for (i in 0 until pts.size - 1) drawLine(accent, pts[i], pts[i + 1], strokeWidth = 4f)
         pts.forEachIndexed { i, p ->
             // Full history: point 0 is the unplayed start, a neutral dot.
             // A window holds played games only, so every dot is win/loss.
-            if (shown.third && i == 0) drawCircle(accent, radius = 6f, center = p)
+            val di = vis.first + i
+            if (shown.third && di == 0) drawCircle(accent, radius = 6f, center = p)
             else {
-                val game = shownHist[if (shown.third) i - 1 else i]
+                val game = shownHist[di - off]
                 drawCircle(
                     if (game.score == 1.0) Color(0xFF27864A) else Color(0xFFC0392B),
                     radius = 6f, center = p,
@@ -407,9 +502,10 @@ private fun RatingGraph(
             drawLine(gridColor, Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
         }
         // X endpoints: true game numbers (a window starts mid-history).
-        val xLabel = { i: Int ->
-            if (xMode == StatsX.GAMES) "${gameNos[i]}"
-            else dateFmt.format(Date(shownHist[if (shown.third) maxOf(i - 1, 0) else i].ts))
+        val xLabel = { di: Int ->
+            if (xMode == StatsX.GAMES) "${gameNos[di]}"
+            // The start dot predates game 1, so it borrows its date.
+            else dateFmt.format(Date(shownHist[maxOf(di - off, 0)].ts))
         }
         val gapPx = 4.dp.toPx()
         val taken = mutableListOf<Pair<Float, Float>>()
@@ -418,10 +514,10 @@ private fun RatingGraph(
             taken.add(cx - lw / 2 to cx + lw / 2)
             return true
         }
-        val first = textMeasurer.measure(xLabel(0), labelStyle)
+        val first = textMeasurer.measure(xLabel(vis.first), labelStyle)
         drawText(first, onSurface, topLeft = Offset(left - first.size.width / 2f, h + 4.dp.toPx()))
         claim(left, first.size.width.toFloat())
-        val last = textMeasurer.measure(xLabel(display.size - 1), labelStyle)
+        val last = textMeasurer.measure(xLabel(vis.last), labelStyle)
         drawText(last, onSurface, topLeft = Offset(left + w - last.size.width / 2f, h + 4.dp.toPx()))
         claim(left + w, last.size.width.toFloat())
         for ((t, s) in xTickTs) {

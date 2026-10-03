@@ -1,6 +1,7 @@
 package com.gotrainer.nine.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -123,5 +124,44 @@ class StatsScreenTest {
         cal.timeInMillis = ts
         val expected = "${cal.get(java.util.Calendar.DAY_OF_MONTH)}/${cal.get(java.util.Calendar.MONTH) + 1}"
         assertEquals(expected, dayMonthFormat().format(java.util.Date(ts)))
+    }
+
+    @Test fun `pan preserves span and clamps at the ends`() {
+        val v = XView(0.2f, 0.6f).panned(0.1f)
+        assertEquals(0.3f, v.start, 1e-6f)
+        assertEquals(0.7f, v.end, 1e-6f)
+        val lo = XView(0.2f, 0.6f).panned(-0.5f)
+        assertEquals(0f, lo.start, 1e-6f)
+        assertEquals(0.4f, lo.end, 1e-4f)
+        val hi = XView(0.2f, 0.6f).panned(0.9f)
+        assertEquals(0.6f, hi.start, 1e-4f)
+        assertEquals(1f, hi.end, 1e-6f)
+    }
+
+    @Test fun `full viewport matches its preset, partial matches none`() {
+        assertTrue(XView(0f, 1f).isFull)
+        assertFalse(XView(0f, 0.5f).isFull)
+    }
+
+    @Test fun `zoom keeps the focus point under the fingers`() {
+        // Focus at plot-center of a full view, 2x in: view halves around it.
+        val v = XView(0f, 1f).zoomed(focus = 0.5f, factor = 2f)
+        assertEquals(0.25f, v.start, 1e-6f)
+        assertEquals(0.75f, v.end, 1e-6f)
+        // Zooming out past full clamps back to full.
+        val back = XView(0.25f, 0.75f).zoomed(focus = 0.5f, factor = 0.25f)
+        assertEquals(0f, back.start, 1e-6f)
+        assertEquals(1f, back.end, 1e-6f)
+        // Minimum span stops runaway zoom.
+        val tiny = XView(0.5f, 0.52f).zoomed(focus = 0.51f, factor = 10f)
+        assertEquals(MIN_VIEW_SPAN, tiny.span, 1e-6f)
+    }
+
+    @Test fun `visible range keeps edge neighbors for line continuity`() {
+        val ts = listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+        assertEquals(0..4, visibleRange(5, ts, XView(0f, 1f)))
+        assertEquals(0..3, visibleRange(5, ts, XView(0f, 0.5f)))
+        assertEquals(1..4, visibleRange(5, ts, XView(0.5f, 1f)))
+        assertEquals(0..-1, visibleRange(0, emptyList(), XView(0f, 1f)))
     }
 }

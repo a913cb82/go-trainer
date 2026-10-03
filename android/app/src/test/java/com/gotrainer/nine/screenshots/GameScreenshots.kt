@@ -175,6 +175,32 @@ class GameScreenshots {
     }
 
     @Test
+    fun s18_stats_zoomed() {
+        // Pinch-zoomed mid-history: viewport off-preset, y auto-scaled.
+        val day = 86_400_000L
+        val base = 1_727_000_000_000L
+        val hist = listOf(
+            RatedGame(base, "20k", true, 1.0),
+            RatedGame(base + day, "19k", true, 1.0),
+            RatedGame(base + 2 * day, "18k", false, 1.0),
+            RatedGame(base + 3 * day, "17k", true, 0.0),
+            RatedGame(base + 4 * day, "17k", true, 1.0),
+            RatedGame(base + 5 * day, "15k", false, 1.0),
+            RatedGame(base + 6 * day, "10k", true, 0.0),
+            RatedGame(base + 7 * day, "14k", true, 1.0),
+        )
+        val r = PlayerWhr.rate(hist)
+        val label = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±${WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()}"
+        snap("18_stats_zoomed") {
+            StatsScreen(
+                history = hist, traj = PlayerWhr.causalTrajectory(hist), trajLoading = false,
+                playerRankText = label, onBack = {}, onReset = {},
+                initialXView = 0.25f..0.75f,
+            )
+        }
+    }
+
+    @Test
     fun s13_automatch_setup() {
         snap("13_automatch_setup") {
             Surface {
