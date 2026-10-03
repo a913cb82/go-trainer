@@ -193,7 +193,7 @@ internal fun XView.zoomAt(fraction: Float): XView {
 
 private const val Y_OVERFLOW_FRAC = 0.10
 private const val Y_SHRINK_FRAC = 0.75
-private const val Y_PAD_FRAC = 0.05
+private const val Y_PAD_FRAC = 0.15
 
 /**
  * Hysteresis, both directions: hold the frozen y domain while the visible
