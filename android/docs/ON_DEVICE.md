@@ -4,6 +4,12 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## Stats y-smoothing merged + installed (2026-10-03, `stats-ysmooth`+`stats-yraw` -> main)
+
+Hysteresis both ways, 250ms release glide on the raw domain, double-tap
+2x zoom, instant axis toggle, 15% landing padding, out-of-range ticks
+skipped. Installed over WiFi adb, launches clean.
+
 ## Stale-resync race merged + installed (2026-10-03, `stale-resync` -> main)
 
 Launch resync replayed the dead game onto the new board (`play B E5`
