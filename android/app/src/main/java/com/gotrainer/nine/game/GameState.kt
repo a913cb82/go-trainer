@@ -100,9 +100,9 @@ data class GameState(
     val difficulty: Difficulty = Difficulty.FIXED,
     /** Automatch target winrate percent (10-90). */
     val targetWinrate: Int = 50,
-    /** Live player rank, e.g. "30k? ±12". */
-    val playerRankText: String = "30k? ±12",
-    /** Live player WHR for the automatch preview; defaults to the 30k start. */
+    /** Live player rank, e.g. "20k? ±8". */
+    val playerRankText: String = "20k? ±6",
+    /** Live player WHR for the automatch preview; defaults to the 20k start. */
     val playerRating: Double = WhrAnchors.RUNG0_WHR,
     /** Pop overlay for the last play's captures; transient, never persisted. */
     val captureFx: CaptureFx? = null,

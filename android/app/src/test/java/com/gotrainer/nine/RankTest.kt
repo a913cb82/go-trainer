@@ -29,14 +29,23 @@ class RankTest {
         assertEquals(Rank.R3D, Rank.fromId("3d"))
     }
 
+    @Test fun `retired sub-20k ids read as the 20k bot actually faced`() {
+        // The 30k–21k bots never existed (one rank_20k config); old records
+        // keep their raw ids in storage, but every lookup resolves upward.
+        assertEquals(Rank.R20K, Rank.fromId("30k"))
+        assertEquals(Rank.R20K, Rank.fromId("25k"))
+        assertEquals(Rank.R20K, Rank.fromId("21k"))
+        assertEquals(Rank.R20K, Rank.fromId("20k"))
+        assertEquals(Rank.R19K, Rank.fromId("19k"))
+    }
+
     @Test fun `full ladder`() {
-        assertEquals(39, Rank.ALL.size)
-        assertEquals("30k", Rank.ALL.first().id)
+        assertEquals(29, Rank.ALL.size)
+        assertEquals("20k", Rank.ALL.first().id)
         assertEquals("9d", Rank.ALL.last().id)
-        assertEquals(Rank.R30K, Rank.fromId("30k"))
         assertEquals(Rank.R9D, Rank.fromId("9d"))
         // Buckets extend across the ladder: weakest loosest, dans tightest.
-        assertEquals(4.0, Rank.R30K.thresholds().bad, 1e-9)
+        assertEquals(4.0, Rank.R20K.thresholds().bad, 1e-9)
         assertEquals(1.5, Rank.R20K.thresholds().good, 1e-9)
         assertEquals(3.2, Rank.R8K.thresholds().bad, 1e-9)
         assertEquals(1.0, Rank.R7K.thresholds().good, 1e-9)

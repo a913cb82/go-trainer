@@ -21,13 +21,15 @@ class StatsScreenTest {
     @Test fun `ticks clamp to the ladder`() {
         val ticks = rankAxisTicks(-5.0, 45.0)
         assertEquals(0, ticks.first())
-        assertTrue(ticks.last() <= 40)
+        // Padded top may overshoot by under one step (display clamps
+        // through rankLabel, as before); it must not run away.
+        assertTrue("last=${ticks.last()}", ticks.last() <= 36)
     }
 
     @Test fun `step thinning keeps the padded top tick`() {
         // Real 139-game history: data peaks at idx ~12.3 but the thinned
         // axis topped at 10, flattening the whole recent climb onto the top
-        // gridline (axis read 30k..20k, everything stronger cut off).
+        // gridline (axis read 20k..8k, everything stronger cut off).
         val ticks = rankAxisTicks(0.0, 12.3)
         assertTrue("last=${ticks.last()}", ticks.last() >= 14)
         assertEquals(ticks.sorted(), ticks)

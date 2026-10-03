@@ -197,14 +197,14 @@ class GameScreenshots {
         val day = 86_400_000L
         val base = 1_727_000_000_000L
         val hist = listOf(
-            RatedGame(base, "30k", true, 1.0),
-            RatedGame(base + day, "29k", true, 1.0),
-            RatedGame(base + 2 * day, "28k", false, 1.0),
-            RatedGame(base + 3 * day, "27k", true, 0.0),
-            RatedGame(base + 4 * day, "27k", true, 1.0),
-            RatedGame(base + 5 * day, "25k", false, 1.0),
-            RatedGame(base + 6 * day, "20k", true, 0.0),
-            RatedGame(base + 7 * day, "24k", true, 1.0),
+            RatedGame(base, "20k", true, 1.0),
+            RatedGame(base + day, "19k", true, 1.0),
+            RatedGame(base + 2 * day, "18k", false, 1.0),
+            RatedGame(base + 3 * day, "17k", true, 0.0),
+            RatedGame(base + 4 * day, "17k", true, 1.0),
+            RatedGame(base + 5 * day, "15k", false, 1.0),
+            RatedGame(base + 6 * day, "10k", true, 0.0),
+            RatedGame(base + 7 * day, "14k", true, 1.0),
         )
         val r = PlayerWhr.rate(hist)
         val label = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±${WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()}"

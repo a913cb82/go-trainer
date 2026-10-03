@@ -13,9 +13,7 @@ import org.junit.Test
  * If BadukAI's recipe changes, these fail first — that's the point.
  */
 class KataGoGtpEngineTest {
-    @Test fun `profiles clamp our 30k ladder to katago 20k floor`() {
-        assertEquals("rank_20k", KataGoGtpEngine.profileFor(Rank.R30K))
-        assertEquals("rank_20k", KataGoGtpEngine.profileFor(Rank.R21K))
+    @Test fun `profiles map every rung directly (ladder starts at the 20k floor)`() {
         assertEquals("rank_20k", KataGoGtpEngine.profileFor(Rank.R20K))
         assertEquals("rank_10k", KataGoGtpEngine.profileFor(Rank.R10K))
         assertEquals("rank_1k", KataGoGtpEngine.profileFor(Rank.R1K))

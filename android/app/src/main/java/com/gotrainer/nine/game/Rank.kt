@@ -3,12 +3,11 @@ package com.gotrainer.nine.game
 import androidx.compose.ui.graphics.Color
 
 /**
- * Full ladder weakest to strongest: 30k … 1k, 1d … 9d.
- * KataGo HumanSL accepts `rank_<id>` profiles across this range.
+ * Ladder weakest to strongest: 20k … 1k, 1d … 9d. KataGo HumanSL profiles
+ * exist for every rung (rank_20k is its floor); the old 30k–21k ids never
+ * had bots behind them and resolve to [R20K] in [fromId].
  */
 enum class Rank(val id: String) {
-    R30K("30k"), R29K("29k"), R28K("28k"), R27K("27k"), R26K("26k"),
-    R25K("25k"), R24K("24k"), R23K("23k"), R22K("22k"), R21K("21k"),
     R20K("20k"), R19K("19k"), R18K("18k"), R17K("17k"), R16K("16k"),
     R15K("15k"), R14K("14k"), R13K("13k"), R12K("12k"), R11K("11k"),
     R10K("10k"), R9K("9k"), R8K("8k"), R7K("7k"), R6K("6k"),
@@ -18,7 +17,15 @@ enum class Rank(val id: String) {
 
     companion object {
         val ALL = entries.toList()
-        fun fromId(id: String): Rank = entries.firstOrNull { it.id == id } ?: R10K
+        fun fromId(id: String): Rank {
+            entries.firstOrNull { it.id == id }?.let { return it }
+            // Retired sub-20k ids: those games were played against the
+            // rank_20k config (the only one below the HumanSL floor), so
+            // old records resolve upward instead of falling back to 10k.
+            val num = id.dropLast(1).toIntOrNull()
+            if (id.endsWith("k") && num != null && num > 20) return R20K
+            return R10K
+        }
     }
 }
 
@@ -96,7 +103,7 @@ fun Rank.thresholds(): Thresholds {
         isDan || num <= 2 -> Thresholds(0.8, 1.8)   // 2k and all dan: tightest
         num <= 7 -> Thresholds(1.0, 2.5)            // 7k–3k
         num <= 11 -> Thresholds(1.5, 3.2)           // 11k–8k
-        else -> Thresholds(1.5, 4.0)                // 30k–12k: loosest
+        else -> Thresholds(1.5, 4.0)                // 20k–12k: loosest
     }
 }
 

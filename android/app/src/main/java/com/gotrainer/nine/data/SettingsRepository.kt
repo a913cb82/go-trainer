@@ -122,7 +122,7 @@ class SettingsRepository(private val appContext: Context) {
         appContext.settingsStore.edit { it[RATING_CURVE] = RatingCurve.encode(points) }
     }
 
-    /** Clear all rated games (stats-screen reset; rank returns to 30k). */
+    /** Clear all rated games (stats-screen reset; rank returns to 20k). */
     suspend fun clearRated() {
         appContext.settingsStore.edit {
             it[RATED_HISTORY] = ""

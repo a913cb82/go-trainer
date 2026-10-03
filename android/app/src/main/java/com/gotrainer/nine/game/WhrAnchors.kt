@@ -6,7 +6,7 @@ import kotlin.math.pow
  * WHR-scale fixed bot anchors.
  *
  * Each rung was derived by probability-matching (adjacent OGS expected
- * scores inverted through the Elo logistic, rung 0 pinned at WHR 525) and
+ * scores inverted through the Elo logistic, rung 0 (20k) pinned) and
  * then frozen here so the Glicko derivation could be deleted. Recalibration
  * (e.g. from bot-vs-bot tournaments) edits this table; stored histories
  * resolve anchors at recompute time, so old games follow automatically.
@@ -15,21 +15,11 @@ object WhrAnchors {
     /** Elo-scale spread: P(win) = 1 / (1 + 10^(-gap / 400)). */
     const val ELO_SCALE = 400.0
 
-    /** Absolute pin: rung 0 (30k) sits at WHR 525. */
-    const val RUNG0_WHR = 525.0
+    /** Absolute pin: rung 0 (20k, the HumanSL floor) sits at this WHR. */
+    const val RUNG0_WHR = 803.641111022468
 
     /** WHR rating per ladder rung, weakest first (frozen derivation, see above). */
     val table: List<Double> = listOf(
-        525.0,
-        547.7660437166625,
-        571.5370510646491,
-        596.357384249043,
-        622.2733637599619,
-        649.3333548173205,
-        677.5878576315331,
-        707.0896016486014,
-        737.8936439554727,
-        770.0574720293159,
         803.641111022468,
         838.7072357832695,
         875.321287821848,
@@ -65,13 +55,13 @@ object WhrAnchors {
     fun whrForRank(rank: Rank): Double = table[Rank.ALL.indexOf(rank)]
 
     /**
-     * Fractional ladder rung (0..38) for a WHR rating; clamps outside the
+     * Fractional ladder rung (0..28) for a WHR rating; clamps outside the
      * table. Piecewise-linear between rungs, exact at every rung.
      */
     fun whrToRank(whr: Double): Double {
         val t = table
         if (whr <= t.first()) return 0.0
-        if (whr >= t.last()) return 38.0
+        if (whr >= t.last()) return 28.0
         var i = 0
         while (t[i + 1] < whr) i++
         return i + (whr - t[i]) / (t[i + 1] - t[i])
@@ -82,7 +72,7 @@ object WhrAnchors {
         1.0 / (1.0 + 10.0.pow(-(whr - oppWhr) / ELO_SCALE))
 
     /**
-     * Player label with provisional marker, e.g. "8k", "2d?", "30k?".
+     * Player label with provisional marker, e.g. "8k", "2d?", "20k?".
      * Uncertainty always shown alongside — never a bare "?". WHR units match
      * Glicko units, so the 160 provisional threshold carries over unchanged.
      */

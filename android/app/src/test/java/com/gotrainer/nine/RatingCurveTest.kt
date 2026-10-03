@@ -11,8 +11,10 @@ class RatingCurveTest {
     private fun pt(ver: Int = Whr.CURVE_VERSION, whr: Double = 700.0, unc: Double = 200.0) =
         RatingCurve.CurvePoint(ver, whr, unc)
 
-    @Test fun `version constant starts at one`() {
-        assertEquals(1, Whr.CURVE_VERSION)
+    @Test fun `version constant tracks point-value changes`() {
+        // v2: ladder starts at 20k (anchors dropped 30k–21k, prior moved).
+        // Bump on any solver/W2/time/anchor change; backfill heals the cache.
+        assertEquals(2, Whr.CURVE_VERSION)
     }
 
     @Test fun `no cache means every index needs computing`() {

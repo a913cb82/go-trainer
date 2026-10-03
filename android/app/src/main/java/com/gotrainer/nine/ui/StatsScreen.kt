@@ -55,7 +55,7 @@ import kotlin.math.roundToInt
 /** Whole-rank ticks spanning the data range (at least a 2-rank window). */
 internal fun rankAxisTicks(minRank: Double, maxRank: Double): List<Int> {
     val lo = max(0, (ceil(minRank - 0.5) - 1).toInt())
-    val hi = minOf(38, (ceil(maxRank + 0.5) + 1).toInt()).let { if (it - lo < 2) lo + 2 else it }
+    val hi = minOf(28, (ceil(maxRank + 0.5) + 1).toInt()).let { if (it - lo < 2) lo + 2 else it }
     val span = hi - lo
     val step = max(1, (span / 3.0).roundToInt())
     // Round the top up to the step grid: the plot maps to ticks.first/last,
@@ -114,7 +114,7 @@ fun StatsScreen(
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Reset rating history?") },
-            text = { Text("Clears all ${history.size} rated games. Your rank returns to 30k.") },
+            text = { Text("Clears all ${history.size} rated games. Your rank returns to 20k.") },
             confirmButton = {
                 TextButton(onClick = { confirmReset = false; onReset() }) {
                     Text("Reset", color = MaterialTheme.colorScheme.error)
@@ -222,7 +222,7 @@ private fun RatingGraph(
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = onSurface)
     val dateFmt = remember { SimpleDateFormat("M/d", Locale.US) }
-    // Window slices the newest games; game 0 (the 30k start dot) joins only
+    // Window slices the newest games; game 0 (the 20k start dot) joins only
     // when the window covers the whole history. The y axis fits rating
     // points only — the band may run off the chart, and yOf clips it.
     val shown = remember(history, traj, window) {

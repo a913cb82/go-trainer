@@ -28,8 +28,9 @@ object Whr {
      * Causal curve version. Bump on anything that changes point values:
      * solver math, W2, game-time mapping, [WhrAnchors] table. The cached
      * curve stores this per point; Stats backfills only stale entries.
+     * v2: ladder starts at 20k (anchors dropped 30k–21k, prior moved).
      */
-    const val CURVE_VERSION = 1
+    const val CURVE_VERSION = 2
 
     /** Newton iteration cap (Coulom's value; typical convergence is <10). */
     const val MAX_ITERATIONS = 200

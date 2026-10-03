@@ -12,32 +12,40 @@ class PlayerRatingTest {
     private fun game(bot: String, score: Double, ts: Long = 1L, black: Boolean = true) =
         RatedGame(ts, bot, black, score)
 
-    @Test fun `no history is the 30k start`() {
+    @Test fun `no history is the 20k start`() {
         val r = PlayerWhr.rate(emptyList())
-        assertEquals(525.0, r.whr, 1e-9)
-        assertEquals("30k?", WhrAnchors.whrPlayerLabel(r.whr, r.unc))
+        assertEquals(WhrAnchors.RUNG0_WHR, r.whr, 1e-9)
+        assertEquals("20k?", WhrAnchors.whrPlayerLabel(r.whr, r.unc))
     }
 
     @Test fun `wins climb and losses fall back`() {
-        val climb = PlayerWhr.rate(listOf(game("30k", 1.0), game("29k", 1.0), game("28k", 1.0)))
-        assert(climb.whr > 525.0) { "three wins must leave 30k" }
+        val climb = PlayerWhr.rate(listOf(game("20k", 1.0), game("19k", 1.0), game("18k", 1.0)))
+        assert(climb.whr > WhrAnchors.RUNG0_WHR) { "three wins must leave 20k" }
         val fall = PlayerWhr.rate(
-            listOf(game("30k", 1.0), game("29k", 1.0), game("28k", 1.0), game("1k", 0.0)),
+            listOf(game("20k", 1.0), game("19k", 1.0), game("18k", 1.0), game("1k", 0.0)),
         )
         assert(fall.whr < climb.whr) { "upset loss must undo progress" }
+    }
+
+    @Test fun `retired sub-20k records count as the 20k bot faced`() {
+        // Correction, not migration: those games were played against the
+        // rank_20k config, so "30k" and "20k" labels rate identically.
+        val old = PlayerWhr.rate(listOf(game("30k", 1.0)))
+        val now = PlayerWhr.rate(listOf(game("20k", 1.0)))
+        assertEquals(now.whr, old.whr, 1e-9)
     }
 
     @Test fun `bot rank resolves through the table, not the record`() {
         // Same game, different table values -> different outcomes. Recalibration
         // edits WhrAnchors; history needs no migration.
         val hist = listOf(game("1d", 1.0))
-        assert(PlayerWhr.rate(hist).whr > 525.0) { "beating 1d from 30k must jump" }
+        assert(PlayerWhr.rate(hist).whr > WhrAnchors.RUNG0_WHR) { "beating 1d from 20k must jump" }
     }
 
     @Test fun `causal trajectory is one point per game, ending at the current rating`() {
         // Causal (each point sees only its own prefix), so every win/loss
         // moves its own dot — unlike the old smoothed full-history refit.
-        val hist = listOf(game("30k", 1.0, ts = 1L), game("30k", 0.0, ts = 2L))
+        val hist = listOf(game("20k", 1.0, ts = 1L), game("20k", 0.0, ts = 2L))
         val traj = PlayerWhr.causalTrajectory(hist)
         assertEquals(2, traj.size)
         assertEquals(PlayerWhr.rate(hist).whr, traj[1].whr, 1e-9)

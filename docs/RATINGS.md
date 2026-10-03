@@ -3,7 +3,8 @@
 Player skill is a Whole-History Rating (Coulom 2008). WHR tracks how skill
 changes over time by refitting the full game history. Graphs and labels show
 rank, never raw numbers. Ranks measure Go skill: kyu ranks are student
-grades (30k weakest), dan ranks are master grades (9d strongest).
+grades (20k weakest — the KataGo human-profile floor), dan ranks are master
+grades (9d strongest).
 
 ## Conventions
 
@@ -16,12 +17,15 @@ grades (30k weakest), dan ranks are master grades (9d strongest).
 - **Time:** whole days from real game timestamps. Same-evening bursts share
   a time point and gain almost no drift uncertainty. Uncertainty measures
   doubt in the rating.
-- **Prior:** one virtual win plus one virtual loss against the 30k pin on
-  the first day. New players start at 30k, uncertain.
-- **Opponents:** 39 fixed bot rungs, derived by probability-matching OGS
+- **Prior:** one virtual win plus one virtual loss against the 20k pin on
+  the first day. New players start at 20k, uncertain.
+- **Opponents:** 29 fixed bot rungs (20k–9d), derived by probability-matching
+  OGS
   expected scores and frozen in `WhrAnchors`. OGS (online-go.com) is the
   Go server whose rank math seeded the table. Anchors carry zero variance
-  and zero color advantage. Recalibration edits the table only.
+  and zero color advantage. Recalibration edits the table only. Old 30k–21k
+  records resolve to the 20k anchor — the only config below the floor — so
+  no history migration was needed.
 - **Solver:** one Newton chain over the player's game-days. The bots never
   move, so players never pull on each other. Tridiagonal Thomas solves run
   each pass. A backtracking line search keeps long streaks convergent.
@@ -29,7 +33,7 @@ grades (30k weakest), dan ranks are master grades (9d strongest).
 
 ## What the player sees
 
-`whrToRank` maps WHR to fractional rungs (0 = 30k … 38 = 9d), clamped.
+`whrToRank` maps WHR to fractional rungs (0 = 20k … 28 = 9d), clamped.
 High uncertainty shows the provisional `?`, always beside the rank — never
 bare. The threshold lives in `BotRatings`. The stats curve is the causal
 refit: point g is the rating over games `1..g` only, so every win/loss moves

@@ -157,19 +157,12 @@ class KataGoGtpEngine(private val appContext: Context) : GoEngine {
 
         /**
          * Rank -> HumanSL profile. KataGo profiles span 20k..9d only
-         * (preaz_/rank_); our ladder runs to 30k, so 21k+ clamp to 20k —
-         * BadukAI's spinner likewise offers 20k..9d. Style stays modern
-         * (rank_); preaz_ (pre-AI-era openings) is a follow-up selector.
+         * (preaz_/rank_); our ladder starts at 20k, the HumanSL floor, so
+         * every rung maps directly — BadukAI's spinner likewise offers
+         * 20k..9d. Style stays modern (rank_); preaz_ (pre-AI-era openings)
+         * is a follow-up selector.
          */
-        fun profileFor(rank: Rank): String {
-            val id = rank.id
-            return if (id.endsWith("k")) {
-                val num = id.dropLast(1).toIntOrNull() ?: 10
-                "rank_${minOf(num, 20)}k"
-            } else {
-                "rank_$id"
-            }
-        }
+        fun profileFor(rank: Rank): String = "rank_${rank.id}"
 
         private val PLAY_LINE = Regex("^play\\s+([A-HJ][1-9]|pass|resign)\\s*$")
 

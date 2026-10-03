@@ -40,17 +40,17 @@ class RatedGameTest {
     }
 
     @Test fun `automatch centers near-even players and clamps at the ends`() {
-        // 1500 WHR at 50% -> rung 25 (the WHR table maps 1500 to rung 24.57).
-        assertEquals(25, GameFlow.automatchRung(1500.0, 50))
+        // 1500 WHR at 50% -> rung 15 (the WHR table maps 1500 to rung 14.57).
+        assertEquals(15, GameFlow.automatchRung(1500.0, 50))
         // Demanding 90% off a mid player -> much weaker bot.
         val weak = GameFlow.automatchRung(1500.0, 90)
-        assert(weak <= 19) { "90% target must drop many rungs, got $weak" }
+        assert(weak <= 9) { "90% target must drop many rungs, got $weak" }
         // Demanding 10% -> much stronger bot.
         val strong = GameFlow.automatchRung(1500.0, 10)
-        assert(strong >= 29) { "10% target must climb many rungs, got $strong" }
-        // Fresh 30k start can never undercut the ladder or overrun it.
-        assertEquals(0, GameFlow.automatchRung(525.0, 90))
-        assertEquals(38, GameFlow.automatchRung(6000.0, 10))
+        assert(strong >= 19) { "10% target must climb many rungs, got $strong" }
+        // Fresh 20k start can never undercut the ladder or overrun it.
+        assertEquals(0, GameFlow.automatchRung(WhrAnchors.RUNG0_WHR, 90))
+        assertEquals(28, GameFlow.automatchRung(6000.0, 10))
     }
 
     @Test fun `automatch pick reproduces the target winrate`() {
@@ -58,7 +58,7 @@ class RatedGameTest {
             val rung = GameFlow.automatchRung(1500.0, target)
             val e = WhrAnchors.expectedScore(1500.0, WhrAnchors.whrForRank(com.gotrainer.nine.game.Rank.ALL[rung]))
             // Within one rung step (~4% winrate) except at the clamps.
-            if (rung in 1..37) assertEquals(target / 100.0, e, 0.05)
+            if (rung in 1..27) assertEquals(target / 100.0, e, 0.05)
         }
     }
 }

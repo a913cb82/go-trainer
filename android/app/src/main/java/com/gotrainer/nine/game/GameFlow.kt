@@ -132,6 +132,6 @@ object GameFlow {
     fun automatchRung(playerRating: Double, targetWinrate: Int): Int {
         val e = targetWinrate.coerceIn(10, 90) / 100.0
         val oppWhr = playerRating + WhrAnchors.ELO_SCALE * kotlin.math.log10((1.0 - e) / e)
-        return WhrAnchors.whrToRank(oppWhr).roundToInt().coerceIn(0, 38)
+        return WhrAnchors.whrToRank(oppWhr).roundToInt().coerceIn(0, 28)
     }
 }

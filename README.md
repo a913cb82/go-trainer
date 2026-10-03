@@ -14,8 +14,8 @@ Each turn shows candidate moves. A candidate is one move you may play. You
 select one move. The app reveals points feedback. The opponent then replies
 with a human-like move.
 
-You play Black or White. You select rank from 30k to 9d. Ranks measure Go
-skill. Kyu ranks are student grades: 30k is the weakest, 1k is the
+You play Black or White. You select rank from 20k to 9d. Ranks measure Go
+skill. Kyu ranks are student grades: 20k is the weakest, 1k is the
 strongest student. Dan ranks are master grades: 1d is the weakest master,
 9d is the strongest. Rank steers the human model toward your level.
 
@@ -27,7 +27,7 @@ move, so quitting (or rebooting) resumes exactly where you left off.
 
 Free-choice games count toward your rank unless you flip the Ranked toggle to Unranked.
 Free choice means you play any move with no suggestions. Rated means the
-game counts toward your rank. The rank uses WHR from 30k. WHR (Whole-History
+game counts toward your rank. The rank uses WHR from 20k. WHR (Whole-History
 Rating) is a rating system that tracks how skill changes over time. See
 `docs/RATINGS.md`. Suggestions games are always unrated. Your rank and
 uncertainty show in the setup sheet. Uncertainty measures doubt in the
