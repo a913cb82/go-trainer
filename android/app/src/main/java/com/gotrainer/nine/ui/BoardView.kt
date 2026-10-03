@@ -109,13 +109,10 @@ fun BoardView(
             if (scale <= 0f || alpha <= 0f) return
             val c = Offset(cx(x), cy(y) + dyCells * cell)
             drawCircle(Color.Black.copy(alpha = 0.25f * alpha), radius = cell * 0.46f * scale, center = Offset(c.x + 2f, c.y + 3f))
-            if (v == 1) {
-                drawCircle(Color(0xFF111111).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c)
-                drawCircle(Color(0xFF3A3A3A).copy(alpha = alpha), radius = cell * 0.13f * scale, center = Offset(c.x - cell * 0.12f, c.y - cell * 0.12f))
-            } else {
-                drawCircle(Color(0xFFFDf8EC).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c)
-                drawCircle(Color(0xFF8A7040).copy(alpha = alpha), radius = cell * 0.44f * scale, center = c, style = Stroke(width = 2f))
-            }
+            drawGoStone(
+                c, cell * 0.44f * scale, black = v == 1,
+                outline = if (v == 1) Color.White else Color.Black, alpha = alpha,
+            )
         }
         // Stone animation: the logical board already moved on — this draws
         // nothing but pixels. The settling stone skips the static pass and

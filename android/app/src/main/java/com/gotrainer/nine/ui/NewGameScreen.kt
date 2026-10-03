@@ -31,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -45,23 +44,22 @@ import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.game.label
 import kotlin.math.roundToInt
 
-/** Stone graphic for the chooser: real black/white stones, a "?" stone for Nigiri. */
+/** Stone graphic for the chooser: shared stones, a "?" stone for Nigiri. */
 @Composable
 private fun StoneDot(kind: ColorChoice, modifier: Modifier = Modifier) {
+    // onSurface is near-black in light mode, near-white in dark: the Nigiri
+    // rim follows the theme without asking which one is active.
+    val nigiriRim = MaterialTheme.colorScheme.onSurface
     Canvas(modifier.size(28.dp)) {
         val r = size.minDimension / 2f
         val c = center
         if (kind == ColorChoice.BLACK) {
-            drawCircle(Color(0xFF111111), radius = r, center = c)
-            drawCircle(
-                Color(0xFF3A3A3A), radius = r * 0.3f,
-                center = Offset(c.x - r * 0.28f, c.y - r * 0.28f),
-            )
+            drawGoStone(c, r, black = true, outline = Color.White)
         } else if (kind == ColorChoice.WHITE) {
-            drawCircle(Color(0xFFFDF8EC), radius = r, center = c)
-            drawCircle(Color(0xFF8A7040), radius = r, center = c, style = Stroke(width = 2f))
+            drawGoStone(c, r, black = false, outline = Color.Black)
         } else {
                 drawCircle(Color(0xFF9A9AA0), radius = r, center = c)
+                drawCircle(nigiriRim, radius = r, center = c, style = Stroke(width = r * 0.09f))
                 drawContext.canvas.nativeCanvas.apply {
                     val paint = android.graphics.Paint().apply {
                         color = android.graphics.Color.WHITE
