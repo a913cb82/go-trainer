@@ -1,0 +1,28 @@
+games=1820 resigns=17514
+pooled blocks (isotonic ties): 3
+triangle violations: 0
+disputed adjacent pairs (wave-two candidates): 23
+  20k-19k P(genuine)=0.662
+  18k-17k P(genuine)=0.928
+  17k-16k P(genuine)=0.472
+  15k-14k P(genuine)=0.321
+  14k-13k P(genuine)=0.373
+  13k-12k P(genuine)=0.279
+  12k-11k P(genuine)=0.422
+  11k-10k P(genuine)=0.282
+  10k-9k P(genuine)=0.422
+  9k-8k P(genuine)=0.306
+  8k-7k P(genuine)=0.320
+  7k-6k P(genuine)=0.282
+  6k-5k P(genuine)=0.414
+  3k-2k P(genuine)=0.409
+  1k-1d P(genuine)=0.337
+  1d-2d P(genuine)=0.299
+  2d-3d P(genuine)=0.385
+  3d-4d P(genuine)=0.279
+  4d-5d P(genuine)=0.475
+  5d-6d P(genuine)=0.371
+  6d-7d P(genuine)=0.349
+  7d-8d P(genuine)=0.462
+  8d-9d P(genuine)=0.398
+loosest rungs: 8d(±93), 9d(±92), 7d(±90), 6d(±88), 5d(±86)
