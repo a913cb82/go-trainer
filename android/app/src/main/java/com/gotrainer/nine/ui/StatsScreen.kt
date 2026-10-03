@@ -3,7 +3,6 @@ package com.gotrainer.nine.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -168,6 +168,8 @@ internal data class XView(val start: Float, val end: Float) {
 }
 
 internal const val MIN_VIEW_SPAN = 0.02f
+private val tapTimeoutMs = android.view.ViewConfiguration.getTapTimeout().toLong()
+private val doubleTapTimeoutMs = android.view.ViewConfiguration.getDoubleTapTimeout().toLong()
 
 /** Drag: shift by a plot fraction, clamped so the span never leaves 0..1. */
 internal fun XView.panned(dFrac: Float): XView {
@@ -408,6 +410,11 @@ private fun RatingGraph(
     val viewRef = rememberUpdatedState(view)
     val onViewRef = rememberUpdatedState(onView)
     val onToggleXRef = rememberUpdatedState(onToggleX)
+    val slopRef = rememberUpdatedState(LocalViewConfiguration.current.touchSlop)
+    val stripRef = rememberUpdatedState(axisStripPx)
+    var lastStripTap by remember(history, xMode) { mutableStateOf(0L) }
+    val lastStripTapRef = rememberUpdatedState(lastStripTap)
+    val setLastStripTapRef = rememberUpdatedState({ t: Long -> lastStripTap = t })
     // Y freezes on first finger down and releases on last finger up.
     // A press-tracking loop owns that truth; the transform loop below only
     // moves the viewport. (The first attempt never even called its freezer —
@@ -415,27 +422,44 @@ private fun RatingGraph(
     // Neither loop consumes, so both observe the same stream.
     Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)
         .onSizeChanged { plotW = it.width.toFloat() }
+        // One loop owns press truth (y-freeze) AND taps. detectTapGestures
+        // holds every tap for the double-tap timeout, which made the axis
+        // toggle feel laggy; here a tap fires on finger-up, instantly.
+        // Double-tap = two instant toggles (net mode unchanged) + view reset.
         .pointerInput(xMode) {
             awaitEachGesture {
                 // Tap detection consumes the down; we only observe, so take it consumed or not.
-                awaitFirstDown(requireUnconsumed = false)
+                val down = awaitFirstDown(requireUnconsumed = false)
                 if (yViewRef.value == null) setYViewRef.value(visMinMaxRef.value)
+                var upPos = down.position
+                var upTime = down.uptimeMillis
+                var multi = false
+                var moved = false
                 do {
                     val event = awaitPointerEvent()
+                    if (event.changes.size > 1) multi = true
+                    for (c in event.changes) {
+                        if (c.pressed) {
+                            if ((c.position - down.position).getDistance() > slopRef.value) moved = true
+                        } else {
+                            upPos = c.position
+                            upTime = c.uptimeMillis
+                        }
+                    }
                 } while (event.changes.any { it.pressed })
                 setYViewRef.value(null)
+                if (!multi && !moved && upTime - down.uptimeMillis < tapTimeoutMs &&
+                    upPos.y >= size.height - stripRef.value
+                ) {
+                    onToggleXRef.value()
+                    val now = upTime
+                    if (now - lastStripTapRef.value < doubleTapTimeoutMs) {
+                        setYViewRef.value(null)
+                        onViewRef.value(XView(0f, 1f))
+                    }
+                    setLastStripTapRef.value(now)
+                }
             }
-        }
-        .pointerInput(xMode, axisStripPx) {
-            detectTapGestures(
-                onDoubleTap = {
-                    setYViewRef.value(null)
-                    onViewRef.value(XView(0f, 1f))
-                },
-                onTap = { off ->
-                    if (off.y >= size.height - axisStripPx) onToggleXRef.value()
-                },
-            )
         }
         .pointerInput(xMode, axisStripPx, leftPx, plotW) {
             detectTransformGestures { centroid, pan, zoom, _ ->
