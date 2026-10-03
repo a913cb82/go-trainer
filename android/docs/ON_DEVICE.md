@@ -4,6 +4,12 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## Stale-resync race merged + installed (2026-10-03, `stale-resync` -> main)
+
+Launch resync replayed the dead game onto the new board (`play B E5`
+popup). Per-move gameSeq bail now. Installed over WiFi adb, launches
+clean (Black to play, E5+D4 mid-game).
+
 ## White-rim restoration merged + installed (2026-10-03, `stone-rimfix` -> main)
 
 White is -1, not 2: the brown rim was missing everywhere. Pixel-verified
