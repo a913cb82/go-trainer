@@ -1,5 +1,11 @@
 # Android on-device notes (living doc — update after every phone session)
 
+## Shared stones + uniform rims merged + installed (2026-10-03, `stone-graphics`+`stone-rims` -> main)
+
+One drawGoStone for chooser/board/animations. Black rim white, white rim
+black, nigiri onSurface; all STONE_RIM_FRAC=0.08. Installed over WiFi adb,
+launches clean.
+
 ## Y-freeze + instant toggle merged + installed (2026-10-03, `stats-yfix` -> main)
 
 Press loop takes consumed downs too; tap detection folded in (fires on
