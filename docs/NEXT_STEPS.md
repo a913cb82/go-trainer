@@ -2,10 +2,11 @@
 
 ## WHR follow-ups (in order)
 
-1. **Bot-vs-bot anchor refit.** Adjacent-rung self-play gives direct gap
-   measurements independent of human data. A rung is one step on the rank
-   ladder. Edit only the frozen table in `WhrAnchors`. Old games pick up
-   anchor changes with no migration.
+1. **Bot-vs-bot anchor refit.** DONE 2026-10-03 (tag
+   `calibration-2026-10-03` on the `tournament` branch, landed as
+   `WhrAnchors` + `CURVE_VERSION` 3). 2,280 games; FP2(3,3) shape, 5k = 1500
+   pin; rung-2 games excluded, 18k takes the smoothed value. Next
+   calibration must retest 18k. Remaining order: w² refit, then color.
 2. **Refit w² from our own history.** The ship value is 60 elo²/day
    (Coulom's Go-data fit). Elo is the rating scale. Select by predictive
    performance once streak data accumulates. GoShrine's 300 is the "humans
