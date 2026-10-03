@@ -413,6 +413,13 @@ private fun RatingGraph(
     var yDisp by remember(history, xMode) { mutableStateOf<Pair<Double, Double>?>(null) }
     val yDispRef = rememberUpdatedState(yDisp)
     val setYDispRef = rememberUpdatedState({ y: Pair<Double, Double>? -> yDisp = y })
+    // Glide state: while non-null the data mapping lerps toward yDisp and
+    // the labels already show it (one snap at release, then a pure glide;
+    // holding stale furniture instead produced hybrid states that read as
+    // reverts). Clearing it is always a no-op: yDisp is already the target.
+    var yMap by remember(history, xMode) { mutableStateOf<Pair<Double, Double>?>(null) }
+    val yMapRef = rememberUpdatedState(yMap)
+    val setYMapRef = rememberUpdatedState({ y: Pair<Double, Double>? -> yMap = y })
     val yMinMax = yView ?: yDisp ?: visMinMax
     val ticks = remember(yMinMax) { rankAxisTicks(yMinMax.first, yMinMax.second) }
     // Games x keeps true game numbers.
@@ -481,22 +488,28 @@ private fun RatingGraph(
         return sub.min() to sub.max()
     }
     // Release policy: hold the frozen domain through small changes
-    // (hysteresis, both directions), else tween to padded nice bounds.
+    // (hysteresis, both directions), else snap labels to padded nice bounds
+    // and glide the mapping there. The glide's end is a strict no-op.
     fun settle(frozen: Pair<Double, Double>, vis: Pair<Double, Double>) {
         if (!yRescaleWanted(frozen, vis)) {
             tweenHolder.value?.cancel()
+            tweenHolder.value = null
+            setYMapRef.value(null)
             setYDispRef.value(frozen)
             return
         }
         val target = paddedNiceDomain(vis)
         tweenHolder.value?.cancel()
+        setYDispRef.value(target)
         tweenHolder.value = scope.launch {
             animate(0f, 1f, animationSpec = tween(250, easing = EaseOutCubic)) { t, _ ->
-                setYDispRef.value(
+                setYMapRef.value(
                     (frozen.first + (target.first - frozen.first) * t) to
                         (frozen.second + (target.second - frozen.second) * t),
                 )
             }
+            setYMapRef.value(null)
+            tweenHolder.value = null
         }
     }
     // Y freezes on first finger down and releases on last finger up.
@@ -514,7 +527,12 @@ private fun RatingGraph(
                 // Tap detection consumes the down; we only observe, so take it consumed or not.
                 val down = awaitFirstDown(requireUnconsumed = false)
                 tweenHolder.value?.cancel()
-                if (yViewRef.value == null) setYViewRef.value(yDispRef.value ?: visMinMaxRef.value)
+                tweenHolder.value = null
+                // Freeze what the eye sees (possibly a mid-glide map).
+                val liveMap = yMapRef.value
+                setYMapRef.value(null)
+                if (yViewRef.value == null)
+                    setYViewRef.value(liveMap ?: yDispRef.value ?: visMinMaxRef.value)
                 var upPos = down.position
                 var upTime = down.uptimeMillis
                 var multi = false
@@ -576,8 +594,10 @@ private fun RatingGraph(
         val bottom = 40.dp.toPx()
         val w = size.width - left
         val h = size.height - bottom
-        val lo = ticks.first().toFloat()
-        val hi = ticks.last().toFloat().takeIf { it > lo } ?: (lo + 1)
+        // Data mapping glides during tweens; furniture already shows the target.
+        val mapDom = yMap ?: (ticks.first().toDouble() to ticks.last().toDouble())
+        val lo = mapDom.first.toFloat()
+        val hi = mapDom.second.toFloat().takeIf { it > lo } ?: (lo + 1)
         fun yRaw(rank: Double): Float = h - ((rank - lo) / (hi - lo)).toFloat() * h
         fun yOf(rank: Double): Float = yRaw(rank.coerceIn(lo.toDouble(), hi.toDouble()))
         fun xOf(t: Float): Float = left + t * w
