@@ -15,5 +15,5 @@ enum class ColorChoice(val id: String) {
 fun ColorChoice.label(): String = when (this) {
     ColorChoice.BLACK -> "Black"
     ColorChoice.WHITE -> "White"
-    ColorChoice.RANDOM -> "Random"
+    ColorChoice.RANDOM -> "Nigiri"
 }

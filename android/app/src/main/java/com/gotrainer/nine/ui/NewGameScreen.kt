@@ -1,10 +1,18 @@
 package com.gotrainer.nine.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,16 +22,20 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.gotrainer.nine.game.ColorChoice
 import com.gotrainer.nine.game.Difficulty
@@ -32,6 +44,73 @@ import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.game.label
 import kotlin.math.roundToInt
+
+/** Stone graphic for the chooser: real black/white stones, a "?" stone for Nigiri. */
+@Composable
+private fun StoneDot(kind: ColorChoice, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(28.dp)) {
+        val r = size.minDimension / 2f
+        val c = center
+        if (kind == ColorChoice.BLACK) {
+            drawCircle(Color(0xFF111111), radius = r, center = c)
+            drawCircle(
+                Color(0xFF3A3A3A), radius = r * 0.3f,
+                center = Offset(c.x - r * 0.28f, c.y - r * 0.28f),
+            )
+        } else if (kind == ColorChoice.WHITE) {
+            drawCircle(Color(0xFFFDF8EC), radius = r, center = c)
+            drawCircle(Color(0xFF8A7040), radius = r, center = c, style = Stroke(width = 2f))
+        } else {
+                drawCircle(Color(0xFF9A9AA0), radius = r, center = c)
+                drawContext.canvas.nativeCanvas.apply {
+                    val paint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.WHITE
+                        textSize = r * 1.1f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        isFakeBoldText = true
+                    }
+                    drawText("?", c.x, c.y + r * 0.38f, paint)
+                }
+            }
+        }
+    }
+
+/**
+ * Full-width mode toggle as selectable headings (not buttons): the active
+ * heading takes the primary color with an underline, the other sits quiet.
+ */
+@Composable
+private fun HeadingToggle(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { i, label ->
+            val sel = i == selected
+            Column(
+                modifier = Modifier.weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Tab,
+                        onClick = { onSelect(i) },
+                    )
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (sel) primary else quiet,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier.fillMaxWidth(0.6f).height(2.dp)
+                        .background(if (sel) primary else Color.Transparent),
+                )
+            }
+        }
+    }
+}
 
 /**
  * New-game setup as a full page (like Stats): back in the top bar, Start at
@@ -71,15 +150,30 @@ fun NewGameScreen(
                 .padding(horizontal = 20.dp).padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("You play as", style = MaterialTheme.typography.labelLarge)
-            SingleChoiceSegmentedButtonRow {
-                ColorChoice.ALL.forEachIndexed { i, c ->
-                    SegmentedButton(
-                        selected = draftColor == c,
-                        onClick = { onDraftColor(c) },
-                        shape = SegmentedButtonDefaults.itemShape(i, ColorChoice.ALL.size),
-                        label = { Text(c.label()) },
-                    )
+            Text("Choose your stones", style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ColorChoice.ALL.forEach { c ->
+                    val sel = draftColor == c
+                    val button: @Composable () -> Unit = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            StoneDot(c)
+                            Text(c.label())
+                        }
+                    }
+                    if (sel) {
+                        Button(
+                            onClick = { onDraftColor(c) },
+                            modifier = Modifier.weight(1f),
+                        ) { button() }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onDraftColor(c) },
+                            modifier = Modifier.weight(1f),
+                        ) { button() }
+                    }
                 }
             }
 
@@ -92,17 +186,12 @@ fun NewGameScreen(
                 Text(s.playerRankText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
 
-            Text("Opponent", style = MaterialTheme.typography.labelLarge)
-            SingleChoiceSegmentedButtonRow {
-                Difficulty.entries.forEachIndexed { i, d ->
-                    SegmentedButton(
-                        selected = draftDifficulty == d,
-                        onClick = { onDraftDifficulty(d) },
-                        shape = SegmentedButtonDefaults.itemShape(i, Difficulty.entries.size),
-                        label = { Text(d.label()) },
-                    )
-                }
-            }
+            Text("Choose Opponent", style = MaterialTheme.typography.labelLarge)
+            HeadingToggle(
+                options = Difficulty.entries.map { it.label() },
+                selected = Difficulty.entries.indexOf(draftDifficulty),
+                onSelect = { onDraftDifficulty(Difficulty.entries[it]) },
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -111,9 +200,12 @@ fun NewGameScreen(
             ) {
                 // Automatch previews the rung Start would pick, live as the slider moves.
                 val autoRank = Rank.ALL[GameFlow.automatchRung(s.playerRating, draftTargetWinrate)]
-                Text("Opponent plays as", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    (if (draftDifficulty == Difficulty.AUTOMATCH) autoRank else draftRank).id,
+                    if (draftDifficulty == Difficulty.AUTOMATCH) "Target winrate (plays ${autoRank.id})" else "Bot plays as",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    if (draftDifficulty == Difficulty.AUTOMATCH) "$draftTargetWinrate%" else draftRank.id,
                     style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -126,14 +218,6 @@ fun NewGameScreen(
                     steps = (Rank.ALL.size - 2).coerceAtLeast(0),
                 )
             } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Target winrate", style = MaterialTheme.typography.bodyMedium)
-                    Text("$draftTargetWinrate%", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                }
                 Slider(
                     value = draftTargetWinrate.toFloat(),
                     onValueChange = { onDraftTargetWinrate(it.roundToInt().coerceIn(10, 90)) },
@@ -141,15 +225,21 @@ fun NewGameScreen(
                     steps = 7,
                 )
             }
-            Text("Rating", style = MaterialTheme.typography.labelLarge)
-            SingleChoiceSegmentedButtonRow {
-                listOf(true to "Ranked", false to "Unranked").forEachIndexed { i, (v, label) ->
-                    SegmentedButton(
-                        selected = draftRanked == v,
-                        onClick = { onDraftRanked(v) },
-                        shape = SegmentedButtonDefaults.itemShape(i, 2),
-                        label = { Text(label) },
-                    )
+            Text("Game Type", style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(true to "Rated", false to "Unrated").forEach { (v, label) ->
+                    if (draftRanked == v) {
+                        Button(onClick = { onDraftRanked(v) }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    } else {
+                        OutlinedButton(onClick = { onDraftRanked(v) }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    }
                 }
             }
 
