@@ -13,3 +13,8 @@ server/libs/
 
 # Bot-tournament scratch (tournament branch only): raw SGFs, engine logs.
 tournament/runs/
+
+# Tournament engine + nets live here, fetched per manifest (never in git).
+tournament/bin/
+tournament/models/
+gtp_logs/

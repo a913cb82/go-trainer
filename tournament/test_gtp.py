@@ -28,6 +28,7 @@ class GtpTest(unittest.TestCase):
 
     def test_genmove_parses_stone_pass_resign(self):
         self.assertEqual(gtp.parse_move("= E5"), ("E5", False))
+        self.assertEqual(gtp.parse_move("play E5"), ("E5", False))
         self.assertEqual(gtp.parse_move("= pass"), ("pass", True))
         self.assertEqual(gtp.parse_move("= resign"), ("resign", False))
 
