@@ -4,6 +4,11 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## Covering y-grid merged + installed (2026-10-03, `stats-ygrid` -> main)
+
+Step-1 grid when narrow, map stretches to outer ticks. Installed over
+WiFi adb, launches clean.
+
 ## Stats y-smoothing merged + installed (2026-10-03, `stats-ysmooth`+`stats-yraw` -> main)
 
 Hysteresis both ways, 250ms release glide on the raw domain, double-tap
