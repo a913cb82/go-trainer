@@ -11,6 +11,7 @@ import com.gotrainer.nine.engine.ScoreResult
 import com.gotrainer.nine.game.RatedGame
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Player-vs-bot flow on the human's chosen colour; the bot plays the other side.
@@ -46,6 +48,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<GameState> = _state.asStateFlow()
     /** Rated-game history for the stats screen (rating folds off this). */
     val ratedHistoryFlow: Flow<List<RatedGame>> = settings.ratedHistory
+    /** Cached causal rating curve (per-point versions; Stats backfills gaps). */
+    val ratedCurveFlow: Flow<List<RatingCurve.CurvePoint>> = settings.ratedCurve
 
     init {
         viewModelScope.launch {
@@ -209,8 +213,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         val upgrade = GameFlow.ratedFinishScore(
                             res.scoreLeadBlack, cur.playerColor == 1, cur.undoUsed, playerMoved = true,
                         )
-                        if (upgrade != null) settings.updateLastRated(upgrade)
-                        updatePlayerRankText()
+                        if (upgrade != null) {
+                            val hist = settings.ratedHistory.first()
+                            val newHist = hist.dropLast(1) + hist.last().copy(score = upgrade)
+                            val r = PlayerWhr.rate(newHist)
+                            settings.updateLastRated(upgrade, curvePointFor(newHist, r))
+                            updatePlayerRankText(r)
+                        } else updatePlayerRankText()
                     }
                 }
             } catch (e: Exception) {
@@ -307,14 +316,42 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Live player rank text (WHR refits are milliseconds; recompute freely). */
-    private suspend fun updatePlayerRankText() {
-        val r = PlayerWhr.rate(settings.ratedHistory.first())
+    /** Live player rank text (single WHR refits are milliseconds; recompute freely). */
+    private suspend fun updatePlayerRankText(known: Whr.Rating? = null) {
+        val r = known ?: PlayerWhr.rate(settings.ratedHistory.first())
         val dev = WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()
         _state.value = _state.value.copy(
             playerRankText = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±$dev",
             playerRating = r.whr,
         )
+    }
+
+    /**
+     * Stats backfill (lazy, once per stale cache): recompute exactly the
+     * missing/stale causal points off the main thread, then publish. Game
+     * flow keeps the latest point fresh, so this usually owes nothing.
+     * A concurrent game end discards the result; the Stats effect retriggers.
+     */
+    private var backfillJob: Job? = null
+    fun backfillCurve() {
+        if (backfillJob?.isActive == true) return
+        backfillJob = viewModelScope.launch {
+            val hist = settings.ratedHistory.first()
+            val cache = settings.ratedCurve.first()
+            val missing = RatingCurve.missingIndices(hist.size, cache)
+            if (missing.isEmpty()) return@launch
+            val games = PlayerWhr.games(hist)
+            val filled = withContext(Dispatchers.Default) {
+                val arr = RatingCurve.aligned(cache, hist.size).toMutableList()
+                for (g in missing) {
+                    val r = Whr.rate(games.take(g + 1))
+                    arr[g] = RatingCurve.CurvePoint(Whr.CURVE_VERSION, r.whr, r.unc)
+                }
+                arr.toList()
+            }
+            if (settings.ratedHistory.first() != hist) return@launch
+            settings.setCurve(filled)
+        }
     }
 
     /** Stats-screen reset: wipe history, rank text folds back to the start. */
@@ -451,12 +488,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * (free-choice) game. Abandons need no end-of-game hook: the loss is
      * already stored; clean finishes upgrade it (see requestFinalScore).
      */
+    /** Latest causal point for a history (game flow caches only r_G). */
+    private fun curvePointFor(hist: List<RatedGame>, r: Whr.Rating? = null): RatingCurve.CurvePoint {
+        val rating = r ?: PlayerWhr.rate(hist)
+        return RatingCurve.CurvePoint(Whr.CURVE_VERSION, rating.whr, rating.unc)
+    }
+
     private fun appendRatedRecord(s: GameState) {
         if (!GameFlow.ratedAppendWanted(s.ranked, s.choiceCount, s.status, s.history, s.playerColor)) return
         val rec = RatedGame(
             System.currentTimeMillis(), s.rank.id, s.playerColor == 1, 0.0,
         )
-        viewModelScope.launch { settings.appendRated(rec) }
+        viewModelScope.launch { settings.appendRated(rec, curvePointFor(settings.ratedHistory.first() + rec)) }
     }
 
     private fun applyPlayerMove(x: Int, y: Int, picked: com.gotrainer.nine.game.Candidate?) {

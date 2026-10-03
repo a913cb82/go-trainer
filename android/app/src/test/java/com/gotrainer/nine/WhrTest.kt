@@ -82,9 +82,9 @@ class WhrTest {
         assertTrue("unc ${r.unc} must stay responsive", r.unc > 150.0 && r.unc < 220.0)
     }
 
-    @Test fun `trajectory follows the games and ends at the current rating`() {
+    @Test fun `causal trajectory follows the games and ends at the current rating`() {
         val games = wins(10)
-        val traj = Whr.trajectory(games)
+        val traj = Whr.causalTrajectory(games)
         val cur = Whr.rate(games)
         assertEquals(10, traj.size)
         assertEquals(cur.whr, traj.last().whr, 1e-9)
@@ -94,5 +94,33 @@ class WhrTest {
 
     @Test fun `custom prior centers empty history`() {
         assertEquals(1000.0, Whr.rate(emptyList(), priorWhr = 1000.0).whr, 1e-9)
+    }
+
+    @Test fun `causal trajectory is empty on empty history`() {
+        assertEquals(emptyList<Whr.Rating>(), Whr.causalTrajectory(emptyList()))
+    }
+
+    @Test fun `causal point g equals the prefix rate`() {
+        // Independence: each point sees only its own prefix, so Stats can
+        // recompute any subset (backfill) in any order with identical results.
+        val games = wins(10)
+        val causal = Whr.causalTrajectory(games)
+        assertEquals(10, causal.size)
+        for (i in games.indices) {
+            val prefix = Whr.rate(games.take(i + 1))
+            assertEquals(prefix.whr, causal[i].whr, 1e-9)
+            assertEquals(prefix.unc, causal[i].unc, 1e-9)
+        }
+        assertEquals(Whr.rate(games).whr, causal.last().whr, 1e-9)
+    }
+
+    @Test fun `causal moves per game inside the same day`() {
+        // Regression for the flat-burst report: same-day games used to share
+        // one day node (flat for 5-20 games); causal accumulates each game's
+        // likelihood in its own prefix.
+        val causal = Whr.causalTrajectory(listOf(Whr.Game(0, rung10, 1.0), Whr.Game(0, rung10, 0.0)))
+        assertEquals(751.95, causal[0].whr, 0.5)
+        assertTrue("second game must move its own point, got ${causal[1].whr}", causal[1].whr < causal[0].whr)
+        assertTrue("balanced evidence stays above the prior, got ${causal[1].whr}", causal[1].whr > 525.0)
     }
 }

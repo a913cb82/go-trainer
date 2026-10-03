@@ -54,7 +54,9 @@ import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.GameViewModel
 import com.gotrainer.nine.game.GoBoard
 import com.gotrainer.nine.game.Rank
+import com.gotrainer.nine.game.RatingCurve
 import com.gotrainer.nine.game.Scoring
+import com.gotrainer.nine.game.Whr
 
 /** Header subtitle: rank alone in free play, rank + total choices otherwise. */
 internal fun headerSubtitle(s: GameState): String {
@@ -88,6 +90,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     var showStats by remember { mutableStateOf(false) }
     var showSetup by remember { mutableStateOf(false) }
     val history by vm.ratedHistoryFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val curve by vm.ratedCurveFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     // Staged setup: the page edits drafts; nothing applies until Start game.
     var draftRank by remember { mutableStateOf(s.rank) }
     var draftMultipleChoice by remember { mutableStateOf(s.multipleChoice) }
@@ -119,8 +122,14 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     }
 
     if (showStats) {
+        val missing = remember(history, curve) { RatingCurve.missingIndices(history.size, curve) }
+        LaunchedEffect(history, curve) { if (missing.isNotEmpty()) vm.backfillCurve() }
+        val traj = remember(history, curve, missing) {
+            if (missing.isEmpty()) curve.map { Whr.Rating(it.whr, it.unc) } else emptyList()
+        }
         StatsScreen(
-            history = history, playerRankText = s.playerRankText,
+            history = history, traj = traj, trajLoading = missing.isNotEmpty(),
+            playerRankText = s.playerRankText,
             onBack = { showStats = false }, onReset = vm::resetHistory,
         )
         return

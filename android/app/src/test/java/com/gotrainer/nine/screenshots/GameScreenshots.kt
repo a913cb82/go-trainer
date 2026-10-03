@@ -209,7 +209,10 @@ class GameScreenshots {
         val r = PlayerWhr.rate(hist)
         val label = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±${WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()}"
         snap("12_stats") {
-            StatsScreen(history = hist, playerRankText = label, onBack = {}, onReset = {})
+            StatsScreen(
+                history = hist, traj = PlayerWhr.causalTrajectory(hist), trajLoading = false,
+                playerRankText = label, onBack = {}, onReset = {},
+            )
         }
     }
 

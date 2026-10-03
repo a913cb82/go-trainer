@@ -31,8 +31,10 @@ grades (30k weakest), dan ranks are master grades (9d strongest).
 
 `whrToRank` maps WHR to fractional rungs (0 = 30k … 38 = 9d), clamped.
 High uncertainty shows the provisional `?`, always beside the rank — never
-bare. The threshold lives in `BotRatings`. The stats curve is the smoothed
-full-history refit, one point per game.
+bare. The threshold lives in `BotRatings`. The stats curve is the causal
+refit: point g is the rating over games `1..g` only, so every win/loss moves
+its own dot. Points are cached versioned per game (`RatingCurve`); game flow
+writes only the latest point and Stats backfills stale entries lazily.
 
 ## Rated play and automatch
 

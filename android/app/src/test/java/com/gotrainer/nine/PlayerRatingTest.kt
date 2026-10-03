@@ -34,11 +34,11 @@ class PlayerRatingTest {
         assert(PlayerWhr.rate(hist).whr > 525.0) { "beating 1d from 30k must jump" }
     }
 
-    @Test fun `trajectory is one smoothed point per game`() {
-        // Smoothed (WHR-native), not causal: every point sees the full
-        // history, so early points already reflect later games.
+    @Test fun `causal trajectory is one point per game, ending at the current rating`() {
+        // Causal (each point sees only its own prefix), so every win/loss
+        // moves its own dot — unlike the old smoothed full-history refit.
         val hist = listOf(game("30k", 1.0, ts = 1L), game("30k", 0.0, ts = 2L))
-        val traj = PlayerWhr.trajectory(hist)
+        val traj = PlayerWhr.causalTrajectory(hist)
         assertEquals(2, traj.size)
         assertEquals(PlayerWhr.rate(hist).whr, traj[1].whr, 1e-9)
     }

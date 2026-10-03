@@ -94,12 +94,20 @@ private enum class StatsWindow(val size: Int, val label: String) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> Unit, onReset: () -> Unit) {
+fun StatsScreen(
+    history: List<RatedGame>,
+    traj: List<Whr.Rating>,
+    trajLoading: Boolean,
+    playerRankText: String,
+    onBack: () -> Unit,
+    onReset: () -> Unit,
+) {
     var xMode by remember { mutableStateOf(StatsX.GAMES) }
     var window by remember { mutableStateOf(StatsWindow.ALL) }
     var confirmReset by remember { mutableStateOf(false) }
     val rating = PlayerWhr.rate(history)
-    val traj = PlayerWhr.trajectory(history)
+    // traj is the cached causal curve (Stats backfills gaps off-thread;
+    // trajLoading covers the rare full rebuild, e.g. after a version bump).
     val wins = history.count { it.score == 1.0 }
     val losses = history.count { it.score == 0.0 }
     if (confirmReset) {
@@ -186,7 +194,15 @@ fun StatsScreen(history: List<RatedGame>, playerRankText: String, onBack: () -> 
                                 )
                             }
                         }
-                        RatingGraph(history = history, traj = traj, xMode = xMode, window = window)
+                        if (trajLoading) {
+                            Text(
+                                "Updating rating curve…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            RatingGraph(history = history, traj = traj, xMode = xMode, window = window)
+                        }
                     }
                 }
             }

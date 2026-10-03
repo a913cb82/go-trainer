@@ -24,9 +24,15 @@ object Whr {
     /** Wiener drift variance, elo^2/day. The "humans improve this fast" knob. */
     const val W2 = 60.0
 
+    /**
+     * Causal curve version. Bump on anything that changes point values:
+     * solver math, W2, game-time mapping, [WhrAnchors] table. The cached
+     * curve stores this per point; Stats backfills only stale entries.
+     */
+    const val CURVE_VERSION = 1
+
     /** Newton iteration cap (Coulom's value; typical convergence is <10). */
     const val MAX_ITERATIONS = 200
-
     /** r-units (log-gamma) to Elo. Numerically identical to Glicko's SCALE: same scale. */
     const val R_TO_ELO = 400.0 / 2.302585092994046
 
@@ -44,19 +50,14 @@ object Whr {
     }
 
     /**
-     * Smoothed skill curve: one estimate per game from a SINGLE full-history
-     * refit (the WHR-native presentation, cf. goratings curves). Unlike the
-     * old causal fold, each point uses all games — a streak retrospectively
-     * reshapes the curve instead of sawtoothing it.
+     * Causal skill curve: point g is `rate` over games `1..g` only. Each
+     * point is an independent full solve (identical results in any order),
+     * so Stats backfills exactly the missing/stale subset. Costs O(G)
+     * solves for a full rebuild — incremental appends keep it at one solve
+     * per game, computed on the game path and cached versioned per point.
      */
-    fun trajectory(games: List<Game>, priorWhr: Double = WhrAnchors.RUNG0_WHR): List<Rating> {
-        if (games.isEmpty()) return emptyList()
-        val fit = solve(games, priorWhr)
-        return games.map { g ->
-            val i = fit.days.binarySearch(g.day).let { if (it < 0) -(it + 1) else it }
-            Rating(fit.elo[i], fit.unc[i])
-        }
-    }
+    fun causalTrajectory(games: List<Game>, priorWhr: Double = WhrAnchors.RUNG0_WHR): List<Rating> =
+        games.indices.map { rate(games.take(it + 1), priorWhr) }
 
     private data class Fit(val days: List<Int>, val elo: List<Double>, val unc: List<Double>)
 
@@ -240,5 +241,5 @@ object PlayerWhr {
 
     fun rate(history: List<RatedGame>): Whr.Rating = Whr.rate(games(history))
 
-    fun trajectory(history: List<RatedGame>): List<Whr.Rating> = Whr.trajectory(games(history))
+    fun causalTrajectory(history: List<RatedGame>): List<Whr.Rating> = Whr.causalTrajectory(games(history))
 }
