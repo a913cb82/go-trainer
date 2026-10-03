@@ -36,6 +36,17 @@ class StatsScreenTest {
         assertEquals(ticks.sorted(), ticks)
     }
 
+    @Test fun `narrow zoom keeps every rank as a gridline`() {
+        // Padded (10.2, 12.8) used to thin to [9, 11, 13, 15], leaving a
+        // lone 11k line on screen. Covering step-1 keeps 10k through 13k.
+        assertEquals(listOf(10, 11, 12, 13), rankAxisTicks(10.2, 12.8))
+    }
+
+    @Test fun `covering grid never overshoots far`() {
+        val ticks = rankAxisTicks(9.5, 20.0)
+        assertEquals(listOf(9, 12, 15, 18, 21), ticks)
+    }
+
     @Test fun `windowed games-x spreads across the plot`() {
         // 10-game window of 139 used raw n/size, squeezing every dot into
         // the right 7% of the plot. Labels stay true numbers; positions

@@ -61,21 +61,36 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Whole-rank ticks spanning the data range (at least a 2-rank window). */
+/**
+ * Whole-rank grid covering the data range (at least a 2-rank window).
+ * Covering, not overshooting: the map stretches to the outer ticks, so
+ * every line stays on screen and narrow zooms keep each rank (step 1
+ * below a 5-rank span). Step targets ~4 in-plot lines.
+ */
 internal fun rankAxisTicks(minRank: Double, maxRank: Double): List<Int> {
-    val lo = max(0, (ceil(minRank - 0.5) - 1).toInt())
-    val hi = minOf(28, (ceil(maxRank + 0.5) + 1).toInt()).let { if (it - lo < 2) lo + 2 else it }
+    var lo = floor(minRank).toInt()
+    var hi = ceil(maxRank).toInt()
+    if (hi - lo < 2) hi = lo + 2
+    lo = max(0, lo)
+    hi = min(28, hi)
+    if (hi - lo < 2) {
+        hi = min(28, lo + 2)
+        lo = max(0, hi - 2)
+    }
     val span = hi - lo
-    val step = max(1, (span / 3.0).roundToInt())
-    // Round the top up to the step grid: the plot maps to ticks.first/last,
-    // so a thinned-away top tick silently becomes the ceiling and flattens
-    // the climb onto the top gridline.
-    val top = lo + ceil(span.toDouble() / step).toInt() * step
+    val step = max(1, (span / 4.0).roundToInt())
+    val top = min(28, lo + ceil(span.toDouble() / step).toInt() * step)
     return (lo..top step step).toList()
 }
+
+/** Map extents for a raw domain: the outer covering ticks, as doubles. */
+internal fun tickExtents(dom: Pair<Double, Double>): Pair<Double, Double> =
+    rankAxisTicks(dom.first, dom.second).let { it.first().toDouble() to it.last().toDouble() }
 
 /**
  * Games-x positions. Full history keeps true proportions (game n sits at
@@ -501,8 +516,9 @@ private fun RatingGraph(
         return sub.min() to sub.max()
     }
     // Release policy: hold the frozen domain through small changes
-    // (hysteresis, both directions), else snap labels to padded nice bounds
-    // and glide the mapping there. The glide's end is a strict no-op.
+    // (hysteresis, both directions), else glide the tick-extent mapping to
+    // the padded landing. The glide runs in map space so its end (extents
+    // of the target) is exactly what the resting map derives: a no-op.
     fun settle(frozen: Pair<Double, Double>, vis: Pair<Double, Double>) {
         if (!yRescaleWanted(frozen, vis)) {
             tweenHolder.value?.cancel()
@@ -512,13 +528,15 @@ private fun RatingGraph(
             return
         }
         val target = paddedDomain(vis)
+        val startMap = tickExtents(frozen)
+        val endMap = tickExtents(target)
         tweenHolder.value?.cancel()
         setYDispRef.value(target)
         tweenHolder.value = scope.launch {
             animate(0f, 1f, animationSpec = tween(250, easing = EaseOutCubic)) { t, _ ->
                 setYMapRef.value(
-                    (frozen.first + (target.first - frozen.first) * t) to
-                        (frozen.second + (target.second - frozen.second) * t),
+                    (startMap.first + (endMap.first - startMap.first) * t) to
+                        (startMap.second + (endMap.second - startMap.second) * t),
                 )
             }
             setYMapRef.value(null)
@@ -607,10 +625,10 @@ private fun RatingGraph(
         val bottom = 40.dp.toPx()
         val w = size.width - left
         val h = size.height - bottom
-        // Data mapping uses the raw domain (gliding during tweens); the
-        // tick bounds would re-expand it. Furniture derives from the same
-        // domain and may overshoot, which is honest headroom.
-        val mapDom = yMap ?: yMinMax
+        // Data mapping stretches to the outer covering ticks (gliding
+        // between extent pairs during tweens). Every gridline stays on
+        // screen by construction; yTickVisible only trims mid-glide frames.
+        val mapDom = yMap ?: tickExtents(yMinMax)
         val lo = mapDom.first.toFloat()
         val hi = mapDom.second.toFloat().takeIf { it > lo } ?: (lo + 1)
         fun yRaw(rank: Double): Float = h - ((rank - lo) / (hi - lo)).toFloat() * h
