@@ -111,8 +111,10 @@ fun BoardView(
             drawCircle(Color.Black.copy(alpha = 0.25f * alpha), radius = cell * 0.46f * scale, center = Offset(c.x + 2f, c.y + 3f))
             // Board stones stay rimless (black) / brown-rimmed (white) as
             // always; outline rims are New Game chooser dressing only.
+            // Values are 1 = black, -1 = white (see GoBoard); the else
+            // branch must stay the white one, exactly like the original.
             drawGoStone(c, cell * 0.44f * scale, black = v == 1, alpha = alpha)
-            if (v == 2)
+            if (v != 1)
                 drawCircle(
                     Color(0xFF8A7040).copy(alpha = alpha),
                     radius = cell * 0.44f * scale, center = c, style = Stroke(width = 2f),
