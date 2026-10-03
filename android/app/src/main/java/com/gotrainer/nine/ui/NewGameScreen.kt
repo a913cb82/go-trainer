@@ -23,6 +23,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -33,6 +37,33 @@ import com.gotrainer.nine.game.GameState
 import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.game.label
 import kotlin.math.roundToInt
+
+/** Guidance preset: one tap writes a canonical (MC, best, worst) triple. */
+internal enum class Guidance {
+    OFF, HINTS, FULL, CUSTOM;
+
+    fun label(): String = when (this) {
+        OFF -> "Off"
+        HINTS -> "Hints"
+        FULL -> "Full"
+        CUSTOM -> "Custom"
+    }
+
+    /** (multipleChoice, best, worst); Off/Custom keep the counts in hand. */
+    fun applyTo(best: Int, worst: Int): Triple<Boolean, Int, Int> = when (this) {
+        OFF -> Triple(false, best, worst)
+        HINTS -> Triple(true, 2, 0)
+        FULL -> Triple(true, 2, 3)
+        CUSTOM -> Triple(true, best, worst)
+    }
+}
+
+/** Derive the preset shown for current drafts; zero-count MC plays free. */
+internal fun guidancePreset(multipleChoice: Boolean, best: Int, worst: Int): Guidance =
+    if (!multipleChoice || best + worst == 0) Guidance.OFF
+    else if (best == 2 && worst == 0) Guidance.HINTS
+    else if (best == 2 && worst == 3) Guidance.FULL
+    else Guidance.CUSTOM
 
 /**
  * New-game setup as a full page (like Stats): back in the top bar, Start at
@@ -63,7 +94,18 @@ fun NewGameScreen(
     onBack: () -> Unit,
     onStart: () -> Unit,
 ) {
-    val showChoiceOptions = draftMultipleChoice && (draftBest + draftWorst) > 0
+    // Guidance preset shown for the current drafts; Fine-tune opens the
+    // counts below without moving anything else on screen.
+    var tuned by remember { mutableStateOf(false) }
+    val preset = guidancePreset(draftMultipleChoice, draftBest, draftWorst)
+    fun applyPreset(g: Guidance) {
+        val (mc, b, w) = g.applyTo(draftBest, draftWorst)
+        onDraftMultipleChoice(mc)
+        onDraftBest(b)
+        onDraftWorst(w)
+        if (g == Guidance.HINTS || g == Guidance.FULL) onDraftFeedback(true)
+        tuned = g == Guidance.CUSTOM
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,10 +117,18 @@ fun NewGameScreen(
                 },
             )
         },
+        bottomBar = {
+            Button(
+                onClick = onStart,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp),
+            ) {
+                Text("Start game")
+            }
+        },
     ) { inner ->
         Column(
             modifier = Modifier.padding(inner).fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp).padding(bottom = 32.dp),
+                .padding(horizontal = 20.dp).padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("You play as", style = MaterialTheme.typography.labelLarge)
@@ -151,40 +201,29 @@ fun NewGameScreen(
                     steps = 7,
                 )
             }
-            // Ranked needs real free play (no candidate moves); suggestions
-            // games are always unrated, so the toggle locks to Unranked there.
-            // The opt-in survives: flip back to free play and Ranked returns.
-            val canRank = !draftMultipleChoice || draftBest + draftWorst == 0
+            Text("Guidance", style = MaterialTheme.typography.labelLarge)
             SingleChoiceSegmentedButtonRow {
-                listOf(true to "Ranked", false to "Unranked").forEachIndexed { i, (v, label) ->
+                Guidance.entries.forEachIndexed { i, g ->
                     SegmentedButton(
-                        selected = (if (canRank) draftRanked else false) == v,
-                        onClick = { onDraftRanked(v) },
-                        enabled = canRank,
-                        shape = SegmentedButtonDefaults.itemShape(i, 2),
-                        label = { Text(label) },
+                        selected = preset == g,
+                        onClick = { applyPreset(g) },
+                        shape = SegmentedButtonDefaults.itemShape(i, Guidance.entries.size),
+                        label = { Text(g.label()) },
                     )
                 }
             }
+            Text(
+                when (preset) {
+                    Guidance.OFF -> "Play anywhere, no candidate moves"
+                    Guidance.HINTS -> "2 best moves to choose from"
+                    Guidance.FULL -> "2 best and 3 worst, points after each pick"
+                    Guidance.CUSTOM -> "Your own mix, tuned below"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Multiple choice mode", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (draftMultipleChoice) "${draftBest + draftWorst} choices per move"
-                        else "Play anywhere, no candidate moves",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = draftMultipleChoice, onCheckedChange = onDraftMultipleChoice)
-            }
-
-            if (draftMultipleChoice) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (tuned || preset == Guidance.CUSTOM) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -213,24 +252,39 @@ fun NewGameScreen(
                     valueRange = 0f..5f,
                     steps = 4,
                 )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Instant feedback", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Show points lost after each pick",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = draftFeedback, onCheckedChange = onDraftFeedback)
+                }
             }
-
-            // Instant feedback only exists when the game offers candidate moves.
-            if (showChoiceOptions) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Instant feedback", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Show points lost after each pick",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Ranked needs real free play (no candidate moves); suggestions
+            // games are always unrated, so the toggle locks to Unranked there.
+            // The opt-in survives: flip back to free play and Ranked returns.
+            Text("Rating", style = MaterialTheme.typography.labelLarge)
+            val canRank = !draftMultipleChoice || draftBest + draftWorst == 0
+            SingleChoiceSegmentedButtonRow {
+                listOf(true to "Ranked", false to "Unranked").forEachIndexed { i, (v, label) ->
+                    SegmentedButton(
+                        selected = (if (canRank) draftRanked else false) == v,
+                        onClick = { onDraftRanked(v) },
+                        enabled = canRank,
+                        shape = SegmentedButtonDefaults.itemShape(i, 2),
+                        label = { Text(label) },
                     )
                 }
-                Switch(checked = draftFeedback, onCheckedChange = onDraftFeedback)
             }
-
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
-                Text("Start game")
-            }
+            if (!canRank) Text(
+                "Guidance games are always unrated.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

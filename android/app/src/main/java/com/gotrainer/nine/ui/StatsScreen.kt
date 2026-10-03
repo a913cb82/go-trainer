@@ -163,15 +163,18 @@ internal fun gamesXValues(gameNos: List<Int>, historySize: Int, full: Boolean): 
         gameNos.map { (it - first).toFloat() / span }
     }
 
-private enum class StatsX { GAMES, TIME }
+/** Graph slice: recent form (last 30, by game), whole arc (by game), timeline (by date). */
+enum class StatsView {
+    RECENT, GAMES, TIME;
 
-/** Graph window: how many recent games to show. */
-private enum class StatsWindow(val size: Int, val label: String) {
-    W10(10, "10"),
-    W100(100, "100"),
-    W1000(1000, "1000"),
-    ALL(Int.MAX_VALUE, "All"),
+    fun label(): String = when (this) {
+        RECENT -> "Recent"
+        GAMES -> "Games"
+        TIME -> "Time"
+    }
 }
+
+private const val RECENT_GAMES = 30
 
 /**
  * Rating history: current rank, record, and a rank-over-time graph with the
@@ -186,9 +189,9 @@ fun StatsScreen(
     playerRankText: String,
     onBack: () -> Unit,
     onReset: () -> Unit,
+    initialView: StatsView = StatsView.GAMES,
 ) {
-    var xMode by remember { mutableStateOf(StatsX.GAMES) }
-    var window by remember { mutableStateOf(StatsWindow.ALL) }
+    var view by remember { mutableStateOf(initialView) }
     var confirmReset by remember { mutableStateOf(false) }
     val rating = PlayerWhr.rate(history)
     // traj is the cached causal curve (Stats backfills gaps off-thread;
@@ -260,22 +263,12 @@ fun StatsScreen(
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SingleChoiceSegmentedButtonRow {
-                            StatsX.entries.forEachIndexed { i, m ->
+                            StatsView.entries.forEachIndexed { i, v ->
                                 SegmentedButton(
-                                    selected = xMode == m,
-                                    onClick = { xMode = m },
-                                    shape = SegmentedButtonDefaults.itemShape(i, StatsX.entries.size),
-                                    label = { Text(if (m == StatsX.GAMES) "Games" else "Time") },
-                                )
-                            }
-                        }
-                        SingleChoiceSegmentedButtonRow {
-                            StatsWindow.entries.forEachIndexed { i, wsel ->
-                                SegmentedButton(
-                                    selected = window == wsel,
-                                    onClick = { window = wsel },
-                                    shape = SegmentedButtonDefaults.itemShape(i, StatsWindow.entries.size),
-                                    label = { Text(wsel.label) },
+                                    selected = view == v,
+                                    onClick = { view = v },
+                                    shape = SegmentedButtonDefaults.itemShape(i, StatsView.entries.size),
+                                    label = { Text(v.label()) },
                                 )
                             }
                         }
@@ -286,7 +279,7 @@ fun StatsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            RatingGraph(history = history, traj = traj, xMode = xMode, window = window)
+                            RatingGraph(history = history, traj = traj, view = view)
                         }
                     }
                 }
@@ -299,19 +292,18 @@ fun StatsScreen(
 private fun RatingGraph(
     history: List<RatedGame>,
     traj: List<Whr.Rating>,
-    xMode: StatsX,
-    window: StatsWindow,
+    view: StatsView,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurfaceVariant
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = onSurface)
     val dateFmt = remember { dayMonthFormat() }
-    // Window slices the newest games; game 0 (the 20k start dot) joins only
-    // when the window covers the whole history. The y axis fits rating
+    // Recent slices the newest 30 games; game 0 (the 20k start dot) joins
+    // only when the slice covers the whole history. The y axis fits rating
     // points only — the band may run off the chart, and yOf clips it.
-    val shown = remember(history, traj, window) {
-        val n = minOf(window.size, history.size)
+    val shown = remember(history, traj, view) {
+        val n = minOf(if (view == StatsView.RECENT) RECENT_GAMES else Int.MAX_VALUE, history.size)
         Triple(history.takeLast(n), traj.takeLast(n), n == history.size)
     }
     val shownHist = shown.first
@@ -325,8 +317,9 @@ private fun RatingGraph(
         val firstNo = history.size - shownHist.size + 1
         (if (shown.third) listOf(0) else emptyList()) + (firstNo..history.size).toList()
     }
-    val xVals: List<Float> = remember(shown, xMode) {
-        if (xMode == StatsX.GAMES) {
+    val timeAxis = view == StatsView.TIME
+    val xVals: List<Float> = remember(shown, timeAxis) {
+        if (!timeAxis) {
             gamesXValues(gameNos, history.size, shown.third)
         } else {
             val t0 = shownHist.first().ts.toDouble()
@@ -335,10 +328,10 @@ private fun RatingGraph(
             else shownHist.map { ((it.ts - t0) / span).toFloat() }
         }
     }
-    // X gridline ticks as (position, label): round game numbers in Games
-    // mode (same normalization as the dots), calendar boundaries in Time.
-    val xTickTs: List<Pair<Float, String>> = remember(shown, xMode) {
-        if (xMode == StatsX.GAMES) {
+    // X gridline ticks as (position, label): round game numbers on the
+    // game axis (same normalization as the dots), calendar dates on Time.
+    val xTickTs: List<Pair<Float, String>> = remember(shown, timeAxis) {
+        if (!timeAxis) {
             val first = gameNos.first()
             val span = (gameNos.size - 1).takeIf { it > 0 } ?: 1
             gamesXTicks(first, gameNos.last()).map { g ->
@@ -408,7 +401,7 @@ private fun RatingGraph(
         }
         // X endpoints: true game numbers (a window starts mid-history).
         val xLabel = { i: Int ->
-            if (xMode == StatsX.GAMES) "${gameNos[i]}"
+            if (!timeAxis) "${gameNos[i]}"
             else dateFmt.format(Date(shownHist[if (shown.third) maxOf(i - 1, 0) else i].ts))
         }
         val gapPx = 4.dp.toPx()

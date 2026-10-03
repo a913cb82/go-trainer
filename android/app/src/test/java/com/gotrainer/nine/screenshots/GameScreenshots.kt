@@ -19,6 +19,7 @@ import com.gotrainer.nine.game.Rank
 import com.gotrainer.nine.ui.GameScreenContent
 import com.gotrainer.nine.ui.NewGameScreen
 import com.gotrainer.nine.ui.StatsScreen
+import com.gotrainer.nine.ui.StatsView
 import com.gotrainer.nine.ui.goTrainerTheme
 import kotlin.math.roundToInt
 import org.junit.Rule
@@ -313,6 +314,88 @@ class GameScreenshots {
         }
     }
 
+    @Test
+    fun s18_setup_guidance() {
+        // Custom mix: expander open, sliders + feedback visible, Start pinned.
+        snap("18_setup_guidance") {
+            Surface {
+                NewGameScreen(
+                    s = GameState(rank = Rank.R8K, playerRankText = "12k ±3", playerRating = 1358.0),
+                    draftRank = Rank.R8K, onDraftRank = {},
+                    draftMultipleChoice = true, onDraftMultipleChoice = {},
+                    draftBest = 3, onDraftBest = {},
+                    draftWorst = 1, onDraftWorst = {},
+                    draftColor = ColorChoice.BLACK, onDraftColor = {},
+                    draftFeedback = true, onDraftFeedback = {},
+                    draftRanked = true, onDraftRanked = {},
+                    draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {},
+                    draftTargetWinrate = 50, onDraftTargetWinrate = {},
+                    onBack = {}, onStart = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun s19_setup_free() {
+        // Free play: guidance Off, Rating toggle live, no sliders anywhere.
+        snap("19_setup_free") {
+            Surface {
+                NewGameScreen(
+                    s = GameState(rank = Rank.R8K, playerRankText = "12k ±3", playerRating = 1358.0),
+                    draftRank = Rank.R8K, onDraftRank = {},
+                    draftMultipleChoice = false, onDraftMultipleChoice = {},
+                    draftBest = 0, onDraftBest = {},
+                    draftWorst = 0, onDraftWorst = {},
+                    draftColor = ColorChoice.WHITE, onDraftColor = {},
+                    draftFeedback = false, onDraftFeedback = {},
+                    draftRanked = true, onDraftRanked = {},
+                    draftDifficulty = Difficulty.FIXED, onDraftDifficulty = {},
+                    draftTargetWinrate = 50, onDraftTargetWinrate = {},
+                    onBack = {}, onStart = {},
+                )
+            }
+        }
+    }
+
+    private fun fortyGameClimb(): List<RatedGame> {
+        val day = 86_400_000L
+        val base = 1_727_000_000_000L
+        val opps = listOf("20k", "19k", "18k", "17k", "16k", "15k", "14k", "13k", "12k", "11k")
+        return (0 until 40).map { i ->
+            val loss = i % 7 == 3 || i % 11 == 8
+            RatedGame(base + i * day, opps[(i / 4).coerceAtMost(9)], i % 2 == 0, if (loss) 0.0 else 1.0)
+        }
+    }
+
+    @Test
+    fun s20_stats_recent() {
+        val hist = fortyGameClimb()
+        val r = PlayerWhr.rate(hist)
+        val label = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±${WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()}"
+        snap("20_stats_recent") {
+            StatsScreen(
+                history = hist, traj = PlayerWhr.causalTrajectory(hist), trajLoading = false,
+                playerRankText = label, onBack = {}, onReset = {},
+                initialView = StatsView.RECENT,
+            )
+        }
+    }
+
+    @Test
+    fun s21_stats_time() {
+        val hist = fortyGameClimb()
+        val r = PlayerWhr.rate(hist)
+        val label = "${WhrAnchors.whrPlayerLabel(r.whr, r.unc)} ±${WhrAnchors.whrRankDeviation(r.whr, r.unc).roundToInt()}"
+        snap("21_stats_time") {
+            StatsScreen(
+                history = hist, traj = PlayerWhr.causalTrajectory(hist), trajLoading = false,
+                playerRankText = label, onBack = {}, onReset = {},
+                initialView = StatsView.TIME,
+            )
+        }
+    }
+
 }
 
 class SetupScreenshots {
@@ -362,6 +445,7 @@ class SetupScreenshots {
             )
         }
     }
+
 }
 
 class GameScreenshotsDark {
