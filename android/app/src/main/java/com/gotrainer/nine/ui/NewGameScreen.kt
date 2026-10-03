@@ -59,7 +59,7 @@ private fun StoneDot(kind: ColorChoice, modifier: Modifier = Modifier) {
             drawGoStone(c, r, black = false, outline = Color.Black)
         } else {
                 drawCircle(Color(0xFF9A9AA0), radius = r, center = c)
-                drawCircle(nigiriRim, radius = r, center = c, style = Stroke(width = r * 0.09f))
+                drawCircle(nigiriRim, radius = r, center = c, style = Stroke(width = r * STONE_RIM_FRAC))
                 drawContext.canvas.nativeCanvas.apply {
                     val paint = android.graphics.Paint().apply {
                         color = android.graphics.Color.WHITE

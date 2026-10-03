@@ -5,13 +5,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 
+/** Rim width as a fraction of stone radius: identical for every stone. */
+internal const val STONE_RIM_FRAC = 0.08f
+
 /**
  * The one stone graphic. New Game chooser, board, and animations all draw
  * through here, so a graphic update lands everywhere at once. Shadows,
  * rings, and placement belong to the board, not the stone.
  *
- * @param outline rim color, or null for rimless. The black stone's rim runs
- * a little thicker than the white stone's.
+ * @param outline rim color, or null for rimless.
  */
 fun DrawScope.drawGoStone(
     center: Offset,
@@ -30,14 +32,14 @@ fun DrawScope.drawGoStone(
         if (outline != null)
             drawCircle(
                 outline.copy(alpha = alpha), radius = radius, center = center,
-                style = Stroke(width = radius * 0.09f),
+                style = Stroke(width = radius * STONE_RIM_FRAC),
             )
     } else {
         drawCircle(Color(0xFFFDF8EC).copy(alpha = alpha), radius = radius, center = center)
         if (outline != null)
             drawCircle(
                 outline.copy(alpha = alpha), radius = radius, center = center,
-                style = Stroke(width = radius * 0.06f),
+                style = Stroke(width = radius * STONE_RIM_FRAC),
             )
     }
 }
