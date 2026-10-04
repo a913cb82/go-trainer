@@ -13,6 +13,23 @@ import org.junit.Test
  * botReply, i.e. AFTER the wait. The bar must go up with the player's move,
  * before any engine sync, on every path a bot reply follows.
  */
+/**
+ * BUG (user report, mirror of the Black case above): new game as White,
+ * tapped through fast: ~2s of dead board, then ~0.3s of thinking bar,
+ * then Black opens. newGame() ran engine().newGame() (cold spawn) before
+ * botReply() raised the bar. The bar must go up before the engine reset
+ * when the bot opens.
+ */
+class WhiteOpensThinkingTest {
+    @Test fun `bot opens implies thinking bar before engine reset`() {
+        assertTrue(GameFlow.newGameThinkingWanted(playerColor = -1))
+    }
+
+    @Test fun `human opens implies no bar before engine reset`() {
+        assertFalse(GameFlow.newGameThinkingWanted(playerColor = 1))
+    }
+}
+
 class HumanMoveThinkingTest {
     @Test fun `placement is always followed by a bot reply`() {
         assertTrue(GameFlow.replyFollowsHumanMove(gameFinished = false))

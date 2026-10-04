@@ -19,6 +19,15 @@ object GameFlow {
     fun botOpens(playerColor: Int): Boolean = playerColor == -1
 
     /**
+     * Whether a fresh newGame() must raise the thinking bar before the
+     * engine reset: exactly when the bot opens (human White). The reset
+     * cold-spawns the engine (~2s), and botReply() — which raises the bar
+     * itself — only runs after it. Without this the board sits dead with
+     * no feedback until the engine is already up.
+     */
+    fun newGameThinkingWanted(playerColor: Int): Boolean = botOpens(playerColor)
+
+    /**
      * Whether to warm the engine in the background while the human thinks:
      * yes exactly when the human is to move and the engine is cold, so a
      * cold start never sits on the first reply's critical path. When the bot

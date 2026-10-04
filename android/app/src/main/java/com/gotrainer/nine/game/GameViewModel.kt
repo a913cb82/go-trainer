@@ -244,11 +244,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         // Reset the persistent engine board first (GTP tree starts fresh), then
         // play: human-White lets the bot open, human-Black waits for a tap.
         viewModelScope.launch {
+            // Whitesecond path: the bot opens after the engine reset, so
+            // raise the bar before the cold spawn, not after (botReply's
+            // own raise comes ~2s too late on a cold start).
+            if (GameFlow.newGameThinkingWanted(playerColor))
+                _state.value = _state.value.copy(isThinking = true)
             try {
                 engine().newGame(_state.value.rank)
             } catch (e: Exception) {
                 Log.e(TAG, "engine newGame failed", e)
-                _state.value = _state.value.copy(error = e.message ?: "Engine error")
+                _state.value = _state.value.copy(isThinking = false, error = e.message ?: "Engine error")
                 return@launch
             }
             if (playerColor != 1) botReply()
