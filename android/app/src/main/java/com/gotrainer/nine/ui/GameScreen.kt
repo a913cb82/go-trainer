@@ -30,6 +30,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -96,6 +97,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
     }
 
     if (showStats) {
+        BackHandler(onBack = { showStats = false })
         val missing = remember(history, curve) { RatingCurve.missingIndices(history.size, curve) }
         LaunchedEffect(history, curve) { if (missing.isNotEmpty()) vm.backfillCurve() }
         val traj = remember(history, curve, missing) {
@@ -109,6 +111,7 @@ fun GameScreen(vm: GameViewModel = viewModel()) {
         return
     }
     if (showSetup) {
+        BackHandler(onBack = { showSetup = false })
         NewGameScreen(
             s = s,
             draftRank = draftRank,
