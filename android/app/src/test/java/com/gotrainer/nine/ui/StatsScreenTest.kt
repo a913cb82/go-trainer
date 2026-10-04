@@ -215,6 +215,15 @@ class StatsScreenTest {
         assertFalse(yTickVisible(9, 9.5f, 12.5f))
     }
 
+    @Test fun `double-tap focus accounts for the current zoom`() {
+        // Zoomed to (0.8, 1.0), a center-plot tap must focus full-range
+        // 0.9, not 0.5 (the old call fed the plot fraction straight in,
+        // landing mid-chart whatever the zoom).
+        assertEquals(0.9f, XView(0.8f, 1.0f).focusAt(0.5f), 1e-6f)
+        assertEquals(0.5f, XView(0f, 1f).focusAt(0.5f), 1e-6f)
+        assertEquals(0f, XView(0.8f, 1.0f).focusAt(-5f), 1e-6f)
+    }
+
     @Test fun `furniture drops ticks outside the map domain`() {
         // Zoomed landing: ticks 9 and 10 below a (10.5, 11.5) map used to
         // coerce onto the top edge and superimpose (user screenshot).

@@ -200,6 +200,9 @@ internal fun XView.panned(dFrac: Float): XView {
     return XView(ns, ns + span)
 }
 
+/** Plot fraction (of the current view) -> full-range focus for zoomAt. */
+internal fun XView.focusAt(t: Float): Float = (start + t * span).coerceIn(0f, 1f)
+
 /** Double-tap: halve the span around the tap fraction, clamped inside. */
 internal fun XView.zoomAt(fraction: Float): XView {
     val s = (span / 2f).coerceIn(MIN_VIEW_SPAN, 1f)
@@ -595,7 +598,8 @@ private fun RatingGraph(
                         val w = plotWRef.value - leftPxRef.value
                         if (w > 0f) {
                             val t = ((upPos.x - leftPxRef.value) / w).coerceIn(0f, 1f)
-                            val nv = viewRef.value.zoomAt(t)
+                            val v = viewRef.value
+                            val nv = v.zoomAt(v.focusAt(t))
                             onViewRef.value(nv)
                             setLastTapRef.value(null)
                             settle(frozen, minMaxFor(nv))
