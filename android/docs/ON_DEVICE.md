@@ -4,6 +4,13 @@
 
 bottomBar carries WindowInsets.navigationBars now. Installed over WiFi adb.
 
+## White-opens thinking bar merged + installed (2026-10-04, `white-thinking` -> main)
+
+newGame() raised the bar only inside botReply(), after the ~2s cold
+engine reset. Bar now goes up before the reset when the bot opens.
+Installed over WiFi adb (usbipd/WSL interop down, wireless-dbg port
+32925), launches clean.
+
 ## Centered min-window merged + installed (2026-10-04, `stats-ydebug` -> main)
 
 Phantom-8k follow-up: the draw was innocent (logcat timeline proved
