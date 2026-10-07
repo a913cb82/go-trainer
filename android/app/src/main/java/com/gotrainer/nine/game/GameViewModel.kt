@@ -427,8 +427,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (s.status != "playing" || s.toMove != s.playerColor || s.reviewIdx != null || s.isThinking) return
         // Any legal point, then the bot replies.
         val pos = currentPosition()
-        if (pos.board.play(s.playerColor, x, y, pos.hashes) < 0) {
-            _state.value = s.copy(error = "Illegal move")
+        val reason = pos.board.illegalReason(s.playerColor, x, y, pos.hashes)
+        if (reason != null) {
+            _state.value = s.copy(error = GoBoard.messageFor(reason))
             return
         }
         applyPlayerMove(x, y)

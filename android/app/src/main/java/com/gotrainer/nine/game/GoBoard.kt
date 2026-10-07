@@ -28,6 +28,10 @@ class GoBoard(val size: Int = 9) {
     fun signMap(): List<List<Int>> =
         List(size) { y -> List(size) { x -> this[x, y] } }
 
+    /** Player-facing illegal-move reason. SUPERKO covers positional
+     * repetition (ko, snapback retakes, ko fights); displayed as "Ko". */
+    enum class IllegalReason { OCCUPIED, SUICIDE, SUPERKO }
+
     /**
      * Play a stone. Returns captured count, or -1 if illegal
      * (occupied, suicide, or superko repetition).
@@ -39,6 +43,32 @@ class GoBoard(val size: Int = 9) {
         require(color == 1 || color == -1)
         if (x !in 0 until size || y !in 0 until size) return -1
         if (this[x, y] != 0) return -1
+        val (trial, captured) = trialWithCaptures(color, x, y) ?: return -1
+        if (!trial.groupHasLiberty(x, y)) return -1 // suicide
+        if (trial.positionHash() in previousHashes) return -1 // superko
+        // Commit
+        trial.cells.copyInto(cells)
+        return captured
+    }
+
+    /**
+     * Why [play] would refuse, or null when the point is legal.
+     * Non-mutating: safe to call on a replay board before committing.
+     */
+    fun illegalReason(color: Int, x: Int, y: Int, previousHashes: Set<Long> = emptySet()): IllegalReason? {
+        require(color == 1 || color == -1)
+        if (x !in 0 until size || y !in 0 until size) return IllegalReason.OCCUPIED
+        if (this[x, y] != 0) return IllegalReason.OCCUPIED
+        val (trial, _) = trialWithCaptures(color, x, y) ?: return IllegalReason.OCCUPIED
+        if (!trial.groupHasLiberty(x, y)) return IllegalReason.SUICIDE
+        if (trial.positionHash() in previousHashes) return IllegalReason.SUPERKO
+        return null
+    }
+
+    /** Placed stone plus immediate opponent captures, before suicide/superko checks. */
+    private fun trialWithCaptures(color: Int, x: Int, y: Int): Pair<GoBoard, Int>? {
+        if (x !in 0 until size || y !in 0 until size) return null
+        if (this[x, y] != 0) return null
         val trial = copy()
         trial[x, y] = color
         var captured = 0
@@ -47,11 +77,7 @@ class GoBoard(val size: Int = 9) {
                 captured += trial.removeGroup(nx, ny)
             }
         }
-        if (!trial.groupHasLiberty(x, y)) return -1 // suicide
-        if (trial.positionHash() in previousHashes) return -1 // superko
-        // Commit
-        trial.cells.copyInto(cells)
-        return captured
+        return trial to captured
     }
 
     fun isLegal(color: Int, x: Int, y: Int, previousHashes: Set<Long> = emptySet()): Boolean {
@@ -145,6 +171,13 @@ class GoBoard(val size: Int = 9) {
             val rng = Random(0x5EED_9A09L)
             ZOBRIST_BLACK = LongArray(361) { rng.nextLong() }
             ZOBRIST_WHITE = LongArray(361) { rng.nextLong() }
+        }
+
+        /** Player-facing text for [GoBoard.IllegalReason]. */
+        fun messageFor(reason: GoBoard.IllegalReason): String = when (reason) {
+            GoBoard.IllegalReason.OCCUPIED -> "Occupied."
+            GoBoard.IllegalReason.SUICIDE -> "Suicide."
+            GoBoard.IllegalReason.SUPERKO -> "Ko. Play elsewhere."
         }
 
         private const val LETTERS = "ABCDEFGHJKLMNOPQRST" // GTP: skip I
